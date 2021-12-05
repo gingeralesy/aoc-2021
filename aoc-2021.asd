@@ -14,6 +14,8 @@
   :serial T
   :components ((:file "package")
                (:file "util")
-               (:file "day1"))
+               (:file "day1")
+               (:file "day2"))
   :depends-on (:alexandria
-               :asdf))
+               :asdf
+               :cl-ppcre))
