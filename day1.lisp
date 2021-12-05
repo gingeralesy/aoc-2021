@@ -73,13 +73,12 @@ How many measurements are larger than the previous measurement?
 
 (defun d1p1 ()
   (with-open-file (stream *day1-input* :if-does-not-exist :error)
-    (loop with count = 0
-          for line = (read-line stream NIL NIL)
+    (loop for line = (read-line stream NIL NIL)
           while line
           for prev = NIL then value
           for value = (parse-integer line)
           counting line into line-count
-          when (and prev (< prev value)) do (incf count)
+          counting (and prev (< prev value)) into count
           finally (return (values count line-count)))))
 
 ;; You puzzle answer was 1162.
@@ -141,13 +140,11 @@ Consider sums of a three-measurement sliding window. How many sums are larger th
         (next (read-line stream))
         (next (read-line stream))
         (next (read-line stream))
-        (loop with count = 0
-              for line = (read-line stream NIL NIL)
+        (loop for line = (read-line stream NIL NIL)
               while line
               for prev = (sum) then current
               for current = (next line)
-              when (< prev current) do (incf count)
-              finally (return count))))))
+              counting (< prev current))))))
 
 ;; Answer: 1190
 ;; That's the right answer! You are one gold star closer to finding the sleigh keys.
