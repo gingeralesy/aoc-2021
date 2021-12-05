@@ -58,3 +58,15 @@ Calculate the horizontal position and depth you would have after following the p
 do you get if you multiply your final horizontal position by your final depth?
 |#
 
+(defun d2p1 ()
+  (loop with length = 0
+        with depth = 0
+        for (direction . units) in (d2-data)
+        do (ecase direction
+             (:forward (incf length units))
+             (:up (setf depth (max (- depth units) 0)))
+             (:down (incf depth units)))
+        finally (return (values (* length depth) length depth))))
+
+;; Your puzzle answer was 1694130.
+;; The first half of this puzzle is complete! It provides one gold star: *
