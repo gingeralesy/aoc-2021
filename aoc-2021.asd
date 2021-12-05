@@ -13,6 +13,7 @@
   :description "Advent of Code 2021 - https://adventofcode.com/"
   :serial T
   :components ((:file "package")
-               (:file "util"))
+               (:file "util")
+               (:file "day1"))
   :depends-on (:alexandria
                :asdf))
