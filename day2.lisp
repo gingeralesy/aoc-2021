@@ -108,3 +108,21 @@ Using this new interpretation of the commands, calculate the horizontal position
 have after following the planned course. What do you get if you multiply your final horizontal
 position by your final depth?
 |#
+
+(defun d2p2 ()
+  (loop with length = 0
+        with depth = 0
+        with aim = 0
+        for (direction . units) in (d2-data)
+        do (ecase direction
+             (:forward
+              (incf length units)
+              (incf depth (* aim units)))
+             (:up (decf aim units))
+             (:down (incf aim units)))
+        finally (return (values (* length depth)
+                                (list :length length
+                                      :depth depth
+                                      :aim aim)))))
+
+;; Answer: 1698850445
