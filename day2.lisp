@@ -13,12 +13,11 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
     (loop with scanner = (cl-ppcre:create-scanner "^(\\w+) (\\d+)$")
           for line = (read-line stream NIL)
           while line
-          for entry = (cl-ppcre:register-groups-bind (direction value)
-                          (scanner line)
-                        (when (and direction value)
-                          (cons (intern (string-upcase direction) :keyword)
-                                (parse-integer value))))
-          collect entry)))
+          collect (cl-ppcre:register-groups-bind (direction value)
+                      (scanner line)
+                    (when (and direction value)
+                      (cons (intern (string-upcase direction) :keyword)
+                            (parse-integer value)))))))
 
 #|
 --- Day 2: Dive! ---
