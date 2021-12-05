@@ -65,7 +65,7 @@ do you get if you multiply your final horizontal position by your final depth?
         for (direction . units) in (d2-data)
         do (ecase direction
              (:forward (incf length units))
-             (:up (setf depth (max (- depth units) 0)))
+             (:up (decf depth units))
              (:down (incf depth units)))
         finally (return (values (* length depth) length depth))))
 
