@@ -114,3 +114,57 @@ just called when the board won, 24, to get the final score, 188 * 24 = 4512.
 To guarantee victory against the giant squid, figure out which board will win first. What will your
 final score be if you choose that board?
 |#
+
+(defun d4p1 ()
+  (multiple-value-bind (draw-numbers boards)
+      (d4-data)
+    (labels ((mark-tile (board checkboard number)
+               "Marks the tile with the number as checked on the checkboard."
+               (loop with found = NIL
+                     until found
+                     for y from 0 below 5
+                     do (loop until found
+                              for x from 0 below 5
+                              do (setf found (= number (aref board y x)))
+                              finally (when found (setf (aref checkboard y x) T)))))
+             (bingo-p (checkboard)
+               "Checks if we've found a bingo on the checkboard."
+               (loop with row-valid = T
+                     with col-valid = T
+                     for n from 0 below 5
+                     do (setf row-valid T
+                              col-valid T)
+                     until (loop for k from 0 below 5
+                                 while (or row-valid col-valid)
+                                 do (when row-valid (setf row-valid (aref checkboard n k)))
+                                 do (when col-valid (setf col-valid (aref checkboard k n)))
+                                 finally (return (or row-valid col-valid)))
+                     finally (return (or row-valid col-valid))))
+             (bingo (board)
+               "Finds the number of draws get a bingo on the given board."
+               (let ((checkboard (make-array '(5 5) :element-type 'boolean :initial-element NIL)))
+                 (loop for draw in draw-numbers
+                       for n from 0
+                       do (mark-tile board checkboard draw)
+                       until (bingo-p checkboard)
+                       finally (return (1+ n)))))
+             (points (board steps)
+               "Calculates the points of the board."
+               (let ((sum 0))
+                 (dotimes (n 5)
+                   (dotimes (k 5)
+                     (let ((number (aref board n k)))
+                       (unless (find number draw-numbers :end steps :test #'=)
+                         (incf sum number)))))
+                 (* sum (nth (1- steps) draw-numbers)))))
+      (loop with min = 1000
+            with best = NIL
+            for board in boards
+            for n from 0
+            for steps = (bingo board)
+            do (when (< steps min)
+                 (setf min steps)
+                 (setf best board))
+            finally (return (values (points best min) best min))))))
+
+;; Answer: 63424
