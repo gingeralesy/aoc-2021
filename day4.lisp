@@ -115,56 +115,91 @@ To guarantee victory against the giant squid, figure out which board will win fi
 final score be if you choose that board?
 |#
 
+(defun d4-mark-tile (board checkboard number)
+  "Marks the tile with the number as checked on the checkboard."
+  (loop with found = NIL
+        until found
+        for y from 0 below 5
+        do (loop until found
+                 for x from 0 below 5
+                 do (setf found (= number (aref board y x)))
+                 finally (when found (setf (aref checkboard y x) T)))))
+
+(defun d4-bingo-p (checkboard)
+  "Checks if we've found a bingo on the checkboard."
+  (loop with row-valid = T
+        with col-valid = T
+        for n from 0 below 5
+        do (setf row-valid T
+                 col-valid T)
+        until (loop for k from 0 below 5
+                    while (or row-valid col-valid)
+                    do (when row-valid (setf row-valid (aref checkboard n k)))
+                    do (when col-valid (setf col-valid (aref checkboard k n)))
+                    finally (return (or row-valid col-valid)))
+        finally (return (or row-valid col-valid))))
+
+(defun d4-bingo (board draw-numbers)
+  "Finds the number of draws get a bingo on the given board."
+  (let ((checkboard (make-array '(5 5) :element-type 'boolean :initial-element NIL)))
+    (loop for draw in draw-numbers
+          for n from 0
+          do (d4-mark-tile board checkboard draw)
+          until (d4-bingo-p checkboard)
+          finally (return (1+ n)))))
+
+(defun points (board steps draw-numbers)
+  "Calculates the points of the board."
+  (let ((sum 0))
+    (dotimes (n 5)
+      (dotimes (k 5)
+        (let ((number (aref board n k)))
+          (unless (find number draw-numbers :end steps :test #'=)
+            (incf sum number)))))
+    (* sum (nth (1- steps) draw-numbers))))
+
 (defun d4p1 ()
   (multiple-value-bind (draw-numbers boards)
       (d4-data)
-    (labels ((mark-tile (board checkboard number)
-               "Marks the tile with the number as checked on the checkboard."
-               (loop with found = NIL
-                     until found
-                     for y from 0 below 5
-                     do (loop until found
-                              for x from 0 below 5
-                              do (setf found (= number (aref board y x)))
-                              finally (when found (setf (aref checkboard y x) T)))))
-             (bingo-p (checkboard)
-               "Checks if we've found a bingo on the checkboard."
-               (loop with row-valid = T
-                     with col-valid = T
-                     for n from 0 below 5
-                     do (setf row-valid T
-                              col-valid T)
-                     until (loop for k from 0 below 5
-                                 while (or row-valid col-valid)
-                                 do (when row-valid (setf row-valid (aref checkboard n k)))
-                                 do (when col-valid (setf col-valid (aref checkboard k n)))
-                                 finally (return (or row-valid col-valid)))
-                     finally (return (or row-valid col-valid))))
-             (bingo (board)
-               "Finds the number of draws get a bingo on the given board."
-               (let ((checkboard (make-array '(5 5) :element-type 'boolean :initial-element NIL)))
-                 (loop for draw in draw-numbers
-                       for n from 0
-                       do (mark-tile board checkboard draw)
-                       until (bingo-p checkboard)
-                       finally (return (1+ n)))))
-             (points (board steps)
-               "Calculates the points of the board."
-               (let ((sum 0))
-                 (dotimes (n 5)
-                   (dotimes (k 5)
-                     (let ((number (aref board n k)))
-                       (unless (find number draw-numbers :end steps :test #'=)
-                         (incf sum number)))))
-                 (* sum (nth (1- steps) draw-numbers)))))
-      (loop with min = 1000
-            with best = NIL
-            for board in boards
-            for n from 0
-            for steps = (bingo board)
-            do (when (< steps min)
-                 (setf min steps)
-                 (setf best board))
-            finally (return (values (points best min) best min))))))
+    (loop with min = 1000
+          with best = NIL
+          for board in boards
+          for n from 0
+          for steps = (d4-bingo board draw-numbers)
+          do (when (< steps min)
+               (setf min steps)
+               (setf best board))
+          finally (return (values (points best min draw-numbers) best min)))))
 
 ;; Answer: 63424
+
+#|
+--- Part Two ---
+
+On the other hand, it might be wise to try a different strategy: let the giant squid win.
+
+You aren't sure how many bingo boards a giant squid could play at once, so rather than waste time
+counting its arms, the safe thing to do is to figure out which board will win last and choose that
+one. That way, no matter which boards it picks, it will win for sure.
+
+In the above example, the second board is the last to win, which happens after 13 is eventually
+called and its middle column is completely marked. If you were to keep playing until this point, the
+second board would have a sum of unmarked numbers equal to 148 for a final score of 148 * 13 = 1924.
+
+Figure out which board will win last. Once it wins, what would its final score be?
+|#
+
+(defun d4p2 ()
+  (multiple-value-bind (draw-numbers boards)
+      (d4-data)
+    (loop with max = 0
+          with worst = NIL
+          for board in boards
+          for n from 0
+          for steps = (d4-bingo board draw-numbers)
+          do (when (< max steps)
+               (setf max steps)
+               (setf worst board))
+          finally (return (values (points worst max draw-numbers) worst max)))))
+
+;; Answer: 23541
