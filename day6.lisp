@@ -90,9 +90,9 @@ of 5934.
 Find a way to simulate lanternfish. How many lanternfish would there be after 80 days?
 |#
 
-(defun d6p1 ()
+(defun d6p1 (&optional (days 80))
   (loop with all-fish = (d6-data)
-        for day from 1 to 80
+        for day from 1 to days
         do (loop for fish = all-fish then (rest fish)
                  while fish
                  do (decf (car fish))
@@ -102,3 +102,18 @@ Find a way to simulate lanternfish. How many lanternfish would there be after 80
         finally (return (length all-fish))))
 
 ;; Answer: 380243
+
+#|
+--- Part Two ---
+
+Suppose the lanternfish live forever and have unlimited food and space. Would they take over the
+entire ocean?
+
+After 256 days in the example above, there would be a total of 26984457539 lanternfish!
+
+How many lanternfish would there be after 256 days?
+|#
+
+(defun d6p2 ()
+  ;; FIXME: This doesn't actually work. The number gets so high the Lisp image crashes.
+  (d6p1 256))
