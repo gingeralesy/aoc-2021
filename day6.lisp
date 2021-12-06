@@ -90,7 +90,7 @@ of 5934.
 Find a way to simulate lanternfish. How many lanternfish would there be after 80 days?
 |#
 
-(defun d6p1 (&optional (days 80))
+(defun d6p1 ()
   (loop with all-fish = (d6-data)
         for day from 1 to days
         do (loop for fish = all-fish then (rest fish)
@@ -115,5 +115,16 @@ How many lanternfish would there be after 256 days?
 |#
 
 (defun d6p2 ()
-  ;; FIXME: This doesn't actually work. The number gets so high the Lisp image crashes.
-  (d6p1 256))
+  (let ((schools (make-array 9 :element-type 'integer :initial-element 0)))
+    (loop for fish in (d6-data)
+          do (incf (aref schools fish)))
+    (loop for day from 1 to 256
+          for zeroes = (aref schools 0)
+          do (loop for n from 0 below 8
+                   do (setf (aref schools n) (aref schools (1+ n))))
+          do (setf (aref schools 8) zeroes)
+          do (incf (aref schools 6) zeroes))
+    (loop for fish across schools
+          summing fish)))
+
+;; Answer: 1708791884591
