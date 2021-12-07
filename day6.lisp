@@ -90,7 +90,8 @@ of 5934.
 Find a way to simulate lanternfish. How many lanternfish would there be after 80 days?
 |#
 
-(defun d6p1 ()
+(defun d6-bad (days)
+  "This is the bad solution that the puzzle hinted towards."
   (loop with all-fish = (d6-data)
         for day from 1 to days
         do (loop for fish = all-fish then (rest fish)
@@ -100,6 +101,22 @@ Find a way to simulate lanternfish. How many lanternfish would there be after 80
                       (setf (car fish) 6)
                       (push 8 all-fish)))
         finally (return (length all-fish))))
+
+(defun d6-good (days)
+  "And this is the correct solution that scales well."
+  (let ((schools (make-array 9 :element-type 'integer :initial-element 0)))
+    (loop for fish in (d6-data)
+          do (incf (aref schools fish)))
+    (loop for day from 1 to days
+          for zeroes = (aref schools 0)
+          do (loop for n from 0 below 8
+                   do (setf (aref schools n) (aref schools (1+ n))))
+          do (setf (aref schools 8) zeroes)
+          do (incf (aref schools 6) zeroes))
+    (loop for fish across schools
+          summing fish)))
+
+(defun d6p1 () (d6-good 80))
 
 ;; Answer: 380243
 
@@ -114,17 +131,6 @@ After 256 days in the example above, there would be a total of 26984457539 lante
 How many lanternfish would there be after 256 days?
 |#
 
-(defun d6p2 ()
-  (let ((schools (make-array 9 :element-type 'integer :initial-element 0)))
-    (loop for fish in (d6-data)
-          do (incf (aref schools fish)))
-    (loop for day from 1 to 256
-          for zeroes = (aref schools 0)
-          do (loop for n from 0 below 8
-                   do (setf (aref schools n) (aref schools (1+ n))))
-          do (setf (aref schools 8) zeroes)
-          do (incf (aref schools 6) zeroes))
-    (loop for fish across schools
-          summing fish)))
+(defun d6p2 () (d6-good 256))
 
 ;; Answer: 1708791884591

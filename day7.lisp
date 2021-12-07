@@ -70,13 +70,14 @@ Determine the horizontal position that the crabs can align to using the least fu
 much fuel must they spend to align to that position?
 |#
 
-(defun d7p1 ()
+(defun d7-get-fuel-use (use-counter)
   (multiple-value-bind (positions max-position)
       (d7-data)
     (let ((fuel-use (make-array (1+ max-position) :initial-element 0 :element-type 'integer)))
       (loop for crab in positions
             do (loop for n from 0 to max-position
-                     do (incf (aref fuel-use n) (abs (- n crab)))))
+                     for distance = (abs (- n crab))
+                     do (incf (aref fuel-use n) (funcall use-counter distance))))
       (loop with min = NIL
             with index = NIL
             for fuel across fuel-use
@@ -85,6 +86,9 @@ much fuel must they spend to align to that position?
                  (setf min fuel
                        index n))
             finally (return (values min index))))))
+
+(defun d7p1 ()
+  (d7-get-fuel-use #'identity))
 
 ;; Answer: 333755
 
@@ -119,21 +123,6 @@ can make you an escape route! How much fuel must they spend to align to that pos
 |#
 
 (defun d7p2 ()
-  (multiple-value-bind (positions max-position)
-      (d7-data)
-    (let ((fuel-use (make-array (1+ max-position) :initial-element 0 :element-type 'integer)))
-      (loop for crab in positions
-            do (loop for n from 0 to max-position
-                     for distance = (abs (- n crab))
-                     for cost = (/ (* distance (1+ distance)) 2)
-                     do (incf (aref fuel-use n) cost)))
-      (loop with min = NIL
-            with index = NIL
-            for fuel across fuel-use
-            for n from 0
-            do (when (or (null min) (< fuel min))
-                 (setf min fuel
-                       index n))
-            finally (return (values min index))))))
+  (d7-get-fuel-use #'(lambda (distance) (/ (* distance (1+ distance)) 2))))
 
 ;; Answer: 94017638
