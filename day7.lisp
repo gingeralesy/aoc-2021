@@ -122,11 +122,10 @@ can make you an escape route! How much fuel must they spend to align to that pos
   (multiple-value-bind (positions max-position)
       (d7-data)
     (let ((fuel-use (make-array (1+ max-position) :initial-element 0 :element-type 'integer)))
-      ;; TODO: This is rather slow. Is there a better way to get the values?
       (loop for crab in positions
             do (loop for n from 0 to max-position
                      for distance = (abs (- n crab))
-                     for cost = (loop for m from 0 to distance summing m)
+                     for cost = (/ (* distance (1+ distance)) 2)
                      do (incf (aref fuel-use n) cost)))
       (loop with min = NIL
             with index = NIL
