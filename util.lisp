@@ -11,3 +11,28 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
     (when (and error (not (probe-file file)))
       (error "Missing file: ~a" filename))
     file))
+
+(defun queue-make ()
+  (cons NIL NIL)) ;; (HEAD . TAIL)
+
+(defun queue-length (queue)
+  (length (car queue)))
+
+(defun queue-push (obj queue)
+  (if (cdr queue)
+      (setf (cddr queue) (cons obj NIL)
+            (cdr queue) (cddr queue))
+      (setf (cdr queue) (cons obj NIL)
+            (car queue) (cdr queue)))
+  queue)
+
+(defun queue-pop (queue)
+  (when (car queue)
+    (let ((obj (caar queue)))
+      (setf (car queue) (cdar queue))
+      (unless (car queue)
+        (setf (cdr queue) NIL))
+      obj)))
+
+(defun queue-as-list (queue)
+  (car queue))
