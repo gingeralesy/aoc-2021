@@ -126,3 +126,13 @@ unique number of segments (highlighted above).
 
 In the output values, how many times do digits 1, 4, 7, or 8 appear?
 |#
+
+(defun d8p1 ()
+  (loop for entry in (d8-data)
+        sum (loop for i from 10 below 14
+                  for segment = (aref entry i)
+                  for signals = (loop for n from 0 below 7
+                                      count (< 0 (logand segment (ash 1 n))))
+                  count (or (= signals 2) (= signals 3) (= signals 4) (= signals 7)))))
+
+;; Answer: 301
