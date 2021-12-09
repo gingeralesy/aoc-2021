@@ -21,7 +21,8 @@
                (:file "day5")
                (:file "day6")
                (:file "day7")
-               (:file "day8"))
+               (:file "day8")
+               (:file "day9"))
   :depends-on (:alexandria
                :asdf
                :cl-ppcre))
