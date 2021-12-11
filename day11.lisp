@@ -341,45 +341,109 @@ Given the starting energy levels of the dumbo octopuses in your cavern, simulate
 total flashes are there after 100 steps?
 |#
 
+(defun d11-flash (x y width height octopuses flashed)
+  (setf (aref flashed y x) T)
+  (loop for yd from -1 to 1
+        do (loop for xd from -1 to 1
+                 for x1 = (+ x xd)
+                 for y1 = (+ y yd)
+                 when (and (not (= 0 yd xd)) (< -1 x1 width) (< -1 y1 height))
+                 do (incf (aref octopuses y1 x1)))))
+
+(defun d11-flash-all (width height octopuses flashed)
+  (loop with count = 0
+        for y from 0 below height
+        do (loop for x from 0 below width
+                 do (when (and (< 9 (aref octopuses y x))
+                               (not (aref flashed y x)))
+                      (d11-flash x y width height octopuses flashed)
+                      (incf count)))
+        finally (return count)))
+
+(defun d11-clean (width height octopuses flashed)
+  (loop with count = 0
+        for y from 0 below height
+        do (loop for x from 0 below width
+                 do (setf (aref flashed y x) NIL)
+                 do (when (< 9 (aref octopuses y x))
+                      (setf (aref octopuses y x) 0)
+                      (incf count)))
+        finally (return count)))
+
+(defun d11-energise (width height octopuses)
+  (loop for y from 0 below height
+        do (loop for x from 0 below width
+                 do (incf (aref octopuses y x)))))
+
 (defun d11p1 (&optional (steps 100))
   (multiple-value-bind (octopuses width height)
       (d11-data)
     (let ((flashed (make-array (list height width) :element-type 'boolean :initial-element NIL))
           (flash-count 0))
-      (labels ((flash (x y)
-                 (setf (aref flashed y x) T)
-                 (loop for yd from -1 to 1
-                       do (loop for xd from -1 to 1
-                                for x1 = (+ x xd)
-                                for y1 = (+ y yd)
-                                when (and (not (= 0 yd xd)) (< -1 x1 width) (< -1 y1 height))
-                                do (incf (aref octopuses y1 x1)))))
-               (flash-all ()
-                 (loop with count = 0
-                       for y from 0 below height
-                       do (loop for x from 0 below width
-                                do (when (and (< 9 (aref octopuses y x))
-                                              (not (aref flashed y x)))
-                                     (flash x y)
-                                     (incf count)))
-                       finally (return count)))
-               (clean ()
-                 (loop with count = 0
-                       for y from 0 below height
-                       do (loop for x from 0 below width
-                                do (setf (aref flashed y x) NIL)
-                                do (when (< 9 (aref octopuses y x))
-                                     (setf (aref octopuses y x) 0)
-                                     (incf count)))
-                       finally (return count)))
-               (energise ()
-                 (loop for y from 0 below height
-                       do (loop for x from 0 below width
-                                do (incf (aref octopuses y x))))))
-        (dotimes (i (1+ steps))
-          (loop while (< 0 (flash-all)))
-          (incf flash-count (clean))
-          (energise))
-        flash-count))))
+      (dotimes (i (1+ steps))
+        (loop while (< 0 (d11-flash-all width height octopuses flashed)))
+        (incf flash-count (d11-clean width height octopuses flashed))
+        (d11-energise width height octopuses))
+      flash-count)))
 
 ;; Answer: 1702
+
+#|
+--- Part Two ---
+
+It seems like the individual flashes aren't bright enough to navigate. However, you might have a
+better option: the flashes seem to be synchronizing!
+
+In the example above, the first time all octopuses flash simultaneously is step 195:
+
+After step 193:
+5877777777
+8877777777
+7777777777
+7777777777
+7777777777
+7777777777
+7777777777
+7777777777
+7777777777
+7777777777
+
+After step 194:
+6988888888
+9988888888
+8888888888
+8888888888
+8888888888
+8888888888
+8888888888
+8888888888
+8888888888
+8888888888
+
+After step 195:
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+0000000000
+
+If you can calculate the exact moments when the octopuses will all flash simultaneously, you should
+be able to navigate through the cavern. What is the first step during which all octopuses flash?
+|#
+
+(defun d11p2 ()
+  (multiple-value-bind (octopuses width height)
+      (d11-data)
+    (let ((flashed (make-array (list height width) :element-type 'boolean :initial-element NIL)))
+      (loop for step from 0
+            do (loop while (< 0 (d11-flash-all width height octopuses flashed)))
+            while (< (d11-clean width height octopuses flashed) (* width height))
+            do (d11-energise width height octopuses)
+            finally (return step)))))
+
+;; Answer: 251
