@@ -8,10 +8,19 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (defparameter *day12-input* (local-file #P"day12.txt" :error T))
 
+(defun d12-build-map (paths)
+  "Goes through the found paths and turns them into a map."
+  (loop with map = NIL ;; Property list. Hash-tables are overkill here.
+        for path in paths
+        do (push (cdr path) (getf map (car path)))
+        do (push (car path) (getf map (cdr path)))
+        finally (return map)))
+
 (defun d12-data ()
+  "Parses all the pathways and caverns into a map and a cavern size list."
   (with-open-file (stream *day12-input* :if-does-not-exist :error)
     (loop with scanner = (cl-ppcre:create-scanner "^(\\w+)-(\\w+)$")
-          with paths = (queue-make)
+          with paths = NIL
           with caves = NIL
           for line = (read-line stream NIL)
           while line
@@ -21,12 +30,12 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                       (to-up (string-upcase to))
                       (from-key (intern from-up :keyword))
                       (to-key (intern to-up :keyword)))
-                 (queue-push (cons from-key to-key) paths)
+                 (push (cons from-key to-key) paths)
                  (unless (getf caves from-key)
                    (setf (getf caves from-key) (string= from-up from)))
                  (unless (getf caves to-key)
                    (setf (getf caves to-key) (string= to-up to)))))
-          finally (return (values (queue-as-list paths) caves)))))
+          finally (return (values (d12-build-map paths) caves)))))
 
 
 #|
@@ -144,3 +153,19 @@ start-RW
 
 How many paths through this cave system are there that visit small caves at most once?
 |#
+
+(defun d12p1 ()
+  (multiple-value-bind (paths caves)
+      (d12-data)
+    (let ((routes))
+      (labels ((find-routes (from visited)
+                 (queue-push from visited)
+                 (if (eql :end from)
+                     (push (queue-as-list (queue-copy visited)) routes)
+                     (loop for cave in (getf paths from)
+                           when (or (not (queue-find cave visited)) (getf caves cave))
+                           do (find-routes cave (queue-copy visited))))))
+        (find-routes :start (queue-make))
+        (length routes)))))
+
+;; Answer: 4495

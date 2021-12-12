@@ -36,3 +36,12 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (defun queue-as-list (queue)
   (car queue))
+
+(defun queue-copy (queue)
+  (let ((copy (queue-make)))
+    (loop for item in (queue-as-list queue)
+          do (queue-push item copy)
+          finally (return copy))))
+
+(defun queue-find (item queue)
+  (find item (car queue)))
