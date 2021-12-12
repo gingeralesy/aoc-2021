@@ -34,8 +34,8 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
         (setf (cdr queue) NIL))
       obj)))
 
-(defun queue-as-list (queue)
-  (car queue))
+(defun queue-as-list (queue &optional copy)
+  (if copy (copy-list (car queue)) (car queue)))
 
 (defun queue-copy (queue)
   (let ((copy (queue-make)))

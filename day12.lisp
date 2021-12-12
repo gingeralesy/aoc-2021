@@ -154,18 +154,90 @@ start-RW
 How many paths through this cave system are there that visit small caves at most once?
 |#
 
+(defun d12-get-routes (paths caves max-visits)
+  ;; TODO: This is awful and needs a rewrite! I misread the part 2 guidelines and ended up hacking
+  ;;       together something that gives the correct answer with minimal changes from the wrong
+  ;;       solution. Please don't look at it.
+  (let ((routes))
+    (labels ((find-routes (from full-route visited special)
+               (incf (getf visited from 0))
+               (queue-push from full-route)
+               (if (eql :end from)
+                   (push (queue-as-list full-route) routes)
+                   (loop for cave in (getf paths from)
+                         for special-p = (and (not special) (not (getf caves cave))
+                                              (= (1- max-visits) (getf visited cave 0)))
+                         when (or (getf caves cave) (< (getf visited cave 0) 1) special-p)
+                         do (find-routes cave
+                                         (queue-copy full-route)
+                                         (copy-list visited)
+                                         (or special (and special-p cave)))))))
+      (find-routes :start (queue-make) (list :start max-visits) NIL)
+      routes)))
+
 (defun d12p1 ()
   (multiple-value-bind (paths caves)
       (d12-data)
-    (let ((routes))
-      (labels ((find-routes (from visited)
-                 (queue-push from visited)
-                 (if (eql :end from)
-                     (push (queue-as-list (queue-copy visited)) routes)
-                     (loop for cave in (getf paths from)
-                           when (or (not (queue-find cave visited)) (getf caves cave))
-                           do (find-routes cave (queue-copy visited))))))
-        (find-routes :start (queue-make))
-        (length routes)))))
+    (length (d12-get-routes paths caves 1))))
 
 ;; Answer: 4495
+
+#|
+--- Part Two ---
+After reviewing the available paths, you realize you might have time to visit a single small cave
+twice. Specifically, big caves can be visited any number of times, a single small cave can be
+visited at most twice, and the remaining small caves can be visited at most once. However, the caves
+named start and end can only be visited exactly once each: once you leave the start cave, you may
+not return to it, and once you reach the end cave, the path must end immediately.
+
+Now, the 36 possible paths through the first example above are:
+
+start,A,b,A,b,A,c,A,end
+start,A,b,A,b,A,end
+start,A,b,A,b,end
+start,A,b,A,c,A,b,A,end
+start,A,b,A,c,A,b,end
+start,A,b,A,c,A,c,A,end
+start,A,b,A,c,A,end
+start,A,b,A,end
+start,A,b,d,b,A,c,A,end
+start,A,b,d,b,A,end
+start,A,b,d,b,end
+start,A,b,end
+start,A,c,A,b,A,b,A,end
+start,A,c,A,b,A,b,end
+start,A,c,A,b,A,c,A,end
+start,A,c,A,b,A,end
+start,A,c,A,b,d,b,A,end
+start,A,c,A,b,d,b,end
+start,A,c,A,b,end
+start,A,c,A,c,A,b,A,end
+start,A,c,A,c,A,b,end
+start,A,c,A,c,A,end
+start,A,c,A,end
+start,A,end
+start,b,A,b,A,c,A,end
+start,b,A,b,A,end
+start,b,A,b,end
+start,b,A,c,A,b,A,end
+start,b,A,c,A,b,end
+start,b,A,c,A,c,A,end
+start,b,A,c,A,end
+start,b,A,end
+start,b,d,b,A,c,A,end
+start,b,d,b,A,end
+start,b,d,b,end
+start,b,end
+
+The slightly larger example above now has 103 paths through it, and the even larger example now has
+3509 paths through it.
+
+Given these new rules, how many paths through this cave system are there?
+|#
+
+(defun d12p2 ()
+  (multiple-value-bind (paths caves)
+      (d12-data)
+    (length (d12-get-routes paths caves 2))))
+
+;; Answer: 131254
