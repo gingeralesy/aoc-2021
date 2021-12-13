@@ -177,3 +177,33 @@ is completed count as a single dot.
 How many dots are visible after completing just the first fold instruction on your transparent
 paper?
 |#
+
+(defun d13p1 ()
+  (multiple-value-bind (dots folds width height)
+      (d13-data)
+    (let ((sheet (make-array (list height width) :element-type 'boolean :initial-element NIL)))
+      (loop for (x . y) in dots do (setf (aref sheet y x) T))
+      (loop for n from 0 below 1
+            for (fold-side . fold-at) in folds
+            do (cond
+                 ((eql :x fold-side)
+                  (unless (= fold-at (floor width 2))
+                    (error "Invalid fold: ~a = ~a" fold-side fold-at))
+                  (loop for x from 1 below (- width fold-at)
+                        do (loop for y from 0 below height
+                                 when (aref sheet y (+ fold-at x))
+                                 do (setf (aref sheet y (- fold-at x)) T)))
+                  (setf width fold-at))
+                 ((eql :y fold-side)
+                  (unless (= fold-at (floor height 2))
+                    (error "Invalid fold: ~a = ~a" fold-side fold-at))
+                  (loop for y from 1 below (- height fold-at)
+                        do (loop for x from 0 below width
+                                 when (aref sheet (+ fold-at y) x)
+                                 do (setf (aref sheet (- fold-at y) x) T)))
+                  (setf height fold-at))
+                 (T (error "Invalid fold: ~a = ~a" fold-side fold-at))))
+      (loop for y from 0 below height
+            sum (loop for x from 0 below width count (aref sheet y x)))))))
+
+;; Answer: 790
