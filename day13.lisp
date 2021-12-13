@@ -187,16 +187,12 @@ paper?
             for (fold-side . fold-at) in folds
             do (cond
                  ((eql :x fold-side)
-                  (unless (= fold-at (floor width 2))
-                    (error "Invalid fold: ~a = ~a" fold-side fold-at))
                   (loop for x from 1 below (- width fold-at)
                         do (loop for y from 0 below height
                                  when (aref sheet y (+ fold-at x))
                                  do (setf (aref sheet y (- fold-at x)) T)))
                   (setf width fold-at))
                  ((eql :y fold-side)
-                  (unless (= fold-at (floor height 2))
-                    (error "Invalid fold: ~a = ~a" fold-side fold-at))
                   (loop for y from 1 below (- height fold-at)
                         do (loop for x from 0 below width
                                  when (aref sheet (+ fold-at y) x)
@@ -207,3 +203,39 @@ paper?
             sum (loop for x from 0 below width count (aref sheet y x)))))))
 
 ;; Answer: 790
+
+#|
+--- Part Two ---
+
+Finish folding the transparent paper according to the instructions. The manual says the code is
+always eight capital letters.
+
+What code do you use to activate the infrared thermal imaging camera system?
+|#
+
+(defun d13p2 ()
+  (multiple-value-bind (dots folds width height)
+      (d13-data)
+    (let ((sheet (make-array (list height width) :element-type 'boolean :initial-element NIL)))
+      (loop for (x . y) in dots do (setf (aref sheet y x) T))
+      (loop for (fold-side . fold-at) in folds
+            do (cond
+                 ((eql :x fold-side)
+                  (loop for x from 1 below (- width fold-at)
+                        do (loop for y from 0 below height
+                                 when (aref sheet y (+ fold-at x))
+                                 do (setf (aref sheet y (- fold-at x)) T)))
+                  (setf width fold-at))
+                 ((eql :y fold-side)
+                  (loop for y from 1 below (- height fold-at)
+                        do (loop for x from 0 below width
+                                 when (aref sheet (+ fold-at y) x)
+                                 do (setf (aref sheet (- fold-at y) x) T)))
+                  (setf height fold-at))
+                 (T (error "Invalid fold: ~a = ~a" fold-side fold-at))))
+      (dotimes (y height)
+        (dotimes (x width)
+          (format T "~c" (if (aref sheet y x) #\# #\.)))
+        (format T "~%")))))
+
+;; Answer: PGHZBFJC
