@@ -200,7 +200,7 @@ paper?
                   (setf height fold-at))
                  (T (error "Invalid fold: ~a = ~a" fold-side fold-at))))
       (loop for y from 0 below height
-            sum (loop for x from 0 below width count (aref sheet y x)))))))
+            sum (loop for x from 0 below width count (aref sheet y x))))))
 
 ;; Answer: 790
 
