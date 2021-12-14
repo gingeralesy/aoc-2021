@@ -126,3 +126,62 @@ quantity of the least common element?
                                                           min max counts))))))))
 
 ;; Answer: 2223
+
+#|
+--- Part Two ---
+
+The resulting polymer isn't nearly strong enough to reinforce the submarine. You'll need to run more
+steps of the pair insertion process; a total of 40 steps should do it.
+
+In the above example, the most common element is B (occurring 2192039569602 times) and the least
+common element is H (occurring 3849876073 times); subtracting these produces 2188189693529.
+
+Apply 40 steps of pair insertion to the polymer template and find the most and least common elements
+in the result. What do you get if you take the quantity of the most common element and subtract the
+quantity of the least common element?
+|#
+
+(defun d14p2 (&optional (steps 40))
+  (multiple-value-bind (template rules)
+      (d14-data)
+    ;; The part 1 solution obviously won't work. Instead keep track of the number of pairs.
+    (flet ((add-pair (a b to &optional (increase 1))
+             (loop for slot in to
+                   for pair = (car slot)
+                   do (when (and (char= a (car pair)) (char= b (cdr pair)))
+                        (incf (cdr slot) increase)
+                        (return-from add-pair to)))
+             (push (cons (cons a b) increase) to)
+             to))
+      (let ((pairs NIL))
+        (loop for prev = template then next
+              for next = (rest template) then (rest next)
+              while next
+              do (setf pairs (add-pair (car prev) (car next) pairs)))
+        (dotimes (i steps)
+          (loop with new-pairs = NIL
+                for ((a . b) . count) in pairs
+                when (< 0 count)
+                do (let ((new (d14-match a b rules)))
+                     (when new
+                       (setf new-pairs (add-pair a new new-pairs count))
+                       (setf new-pairs (add-pair new b new-pairs count))))
+                finally (setf pairs new-pairs)))
+        (let ((counts (list (cons (first template) 1))))
+          (loop for (pair . count) in pairs
+                for ch = (cdr pair)
+                for old = (assoc ch counts :test #'char=)
+                when (< 0 count)
+                do (if old
+                       (rplacd (assoc ch counts :test #'char=) (+ (cdr old) count))
+                       (push (cons ch count) counts)))
+          (loop with min = (first counts)
+                with max = (first counts)
+                for slot in counts
+                for count = (cdr slot)
+                when (< count (cdr min)) do (setf min slot)
+                when (< (cdr max) count) do (setf max slot)
+                finally (return (values (- (cdr max) (cdr min))
+                                        min max counts))))))))
+
+;; Answer: 2566282754493
