@@ -29,6 +29,28 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
             (car queue) (cdr queue)))
   queue)
 
+(defun pqueue-push (obj queue &optional (key #'identity) (test #'<))
+  "Use this to ensure ordering."
+  (cond
+    ((queue-empty-p queue)
+     (queue-push obj queue))
+    ((funcall test (funcall key obj) (funcall key (caar queue)))
+     (let ((new (cons obj (car queue))))
+       (setf (car queue) new)))
+    (T
+     (loop with obj-key = (funcall key obj)
+           for prev = (car queue) then next
+           for next = (cdr prev)
+           for prev-key = (and prev (funcall key (car prev))) then next-key
+           for next-key = (and next (funcall key (car next)))
+           until (or (null next) (and (funcall test prev-key obj-key)
+                                      (funcall test obj-key next-key)))
+           finally (let ((new (cons obj next)))
+                     (setf (cdr prev) new)
+                     (when (null next)
+                       (setf (cdr queue) new))))))
+  queue)
+
 (defun queue-pop (queue)
   (when (car queue)
     (let ((obj (caar queue)))
@@ -38,6 +60,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
       obj)))
 
 (defun pqueue-pop (queue &optional (key #'identity) (test #'<))
+  "Use this if you need ordering but can't trust the queue."
   (when (car queue)
     (loop with min-prev = NIL
           with min = (car queue)
