@@ -31,4 +31,5 @@
                (:file "day15"))
   :depends-on (:alexandria
                :asdf
-               :cl-ppcre))
+               :cl-ppcre
+               :trees))
