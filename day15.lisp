@@ -178,7 +178,7 @@ its risk is not counted).
 Using the full map, what is the lowest total risk of any path from the top left to the bottom right?
 |#
 
-(defun d15p2 (&optional (start '(0 . 0)) end)
+(defun d15p2 (&key (start '(0 . 0)) end silent)
   "Finds the route through a map with A* algorithm."
   (multiple-value-bind (map width height)
       (d15-data)
@@ -191,7 +191,14 @@ Using the full map, what is the lowest total risk of any path from the top left 
                      for old = (aref map (mod y height) (mod x width))
                      for new = (1+ (mod (1- (+ old (floor x width) (floor y height))) 9))
                      do (setf (aref true-map y x) new)))
-      (d15-a* true-map true-width true-height
-              start (or end (cons (1- true-width) (1- true-height)))))))
+      (let ((start-time (get-internal-real-time)))
+        (d15-a* true-map true-width true-height
+                start (or end (cons (1- true-width) (1- true-height))))
+        (let ((delta (coerce (/ (- (get-internal-real-time) start-time)
+                                internal-time-units-per-second)
+                             'single-float)))
+          (unless silent
+            (format T "~a sec.~%" delta))
+          delta)))))
 
 ;; Answer: 2887
