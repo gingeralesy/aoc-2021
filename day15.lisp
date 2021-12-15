@@ -65,12 +65,17 @@ What is the lowest total risk of any path from the top left to the bottom right?
   (g-value #xffffffff :type integer) ;; Cost of travel thus far.
   (f-value #xffffffff :type integer)) ;; Approximated cost to end (g-value + heuristics).
 
-(defun d15-print (map width height)
+(defun d15-print (map width height &optional path (target T))
+  (when path
+    (loop for node = path then (d15-node-route node)
+          while node
+          for (x . y) = (d15-node-pos node)
+          do (setf (aref map y x) 10)))
   (loop for row from 0 below height
         do (loop for col from 0 below width
                  for node = (aref map row col)
-                 do (format T "~c" (char *d15-print-symbols* node)))
-        do (format T "~%")))
+                 do (format target "~c" (char *d15-print-symbols* node)))
+        do (format target "~%")))
 
 (defun d15-a* (map width height start end)
   (let ((nodes (make-array (list height width) :initial-element NIL)))
@@ -126,7 +131,12 @@ What is the lowest total risk of any path from the top left to the bottom right?
               until (trees:emptyp open)
               for current = (trees:delete (trees:minimum open) open)
               do (when (node= current end)
-                   (return-from d15-a* (count-path current)))
+                   (let ((count (count-path current)))
+                     (with-open-file (stream (local-file #P"day15.out") :if-exists :overwrite
+                                                                        :if-does-not-exist :create
+                                                                        :direction :output)
+                       (d15-print map width height current stream))
+                     (return-from d15-a* count)))
               do (loop for neighbour in (neighbours current open)
                        unless (trees:find neighbour open)
                        do (trees:insert neighbour open)))))))
