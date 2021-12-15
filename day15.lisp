@@ -122,3 +122,50 @@ What is the lowest total risk of any path from the top left to the bottom right?
     (d15-a* map width height start (or end (cons (1- width) (1- height))))))
 
 ;; Answer: 527
+
+#|
+Now that you know how to find low-risk paths in the cave, you can try to find your way out.
+
+The entire cave is actually five times larger in both dimensions than you thought; the area you
+originally scanned is just one tile in a 5x5 tile area that forms the full map. Your original map
+tile repeats to the right and downward; each time the tile repeats to the right or downward, all of
+its risk levels are 1 higher than the tile immediately up or left of it. However, risk levels above
+9 wrap back around to 1. So, if your original map had some position with a risk level of 8, then
+that same position on each of the 25 total tiles would be as follows:
+
+8 9 1 2 3
+9 1 2 3 4
+1 2 3 4 5
+2 3 4 5 6
+3 4 5 6 7
+
+Each single digit above corresponds to the example position with a value of 8 on the top-left tile.
+Because the full map is actually five times larger in both dimensions, that position appears a total
+of 25 times, once in each duplicated tile, with the values shown above.
+
+Equipped with the full map, you can now find a path from the top left corner to the bottom right
+corner with the lowest total risk.
+
+The total risk of this path of the example is 315 (the starting position is still never entered, so
+its risk is not counted).
+
+Using the full map, what is the lowest total risk of any path from the top left to the bottom right?
+|#
+
+(defun d15p2 (&optional (start '(0 . 0)) end)
+  "Finds the route through a map with A* algorithm."
+  (multiple-value-bind (map width height)
+      (d15-data)
+    (let* ((true-width (* 5 width))
+           (true-height (* 5 height))
+           (true-map (make-array (list true-height true-width) :element-type '(unsigned-byte 4)
+                                                               :initial-element 0)))
+      (loop for y from 0 below true-height
+            do (loop for x from 0 below true-width
+                     for old = (aref map (mod y height) (mod x width))
+                     for new = (1+ (mod (1- (+ old (floor x width) (floor y height))) 9))
+                     do (setf (aref true-map y x) new)))
+      (d15-a* true-map true-width true-height
+              start (or end (cons (1- true-width) (1- true-height)))))))
+
+;; Answer: 2887
