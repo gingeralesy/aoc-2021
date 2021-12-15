@@ -18,6 +18,9 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 (defun queue-length (queue)
   (length (car queue)))
 
+(defun queue-empty-p (queue)
+  (null (car queue)))
+
 (defun queue-push (obj queue)
   (if (cdr queue)
       (setf (cddr queue) (cons obj NIL)
@@ -34,6 +37,24 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
         (setf (cdr queue) NIL))
       obj)))
 
+(defun pqueue-pop (queue &optional (key #'identity) (test #'<))
+  (when (car queue)
+    (loop with min-prev = NIL
+          with min = (car queue)
+          for cur = (car queue) then next
+          for next = (cdr cur) then (cdr next)
+          while next
+          do (when (funcall test (funcall key (car next)) (funcall key (car min)))
+               (setf min-prev cur)
+               (setf min next))
+          finally (progn
+                    (if min-prev
+                        (setf (cdr min-prev) (cdr min))
+                        (setf (car queue) (cdr min)))
+                    (unless (cdr min)
+                      (setf (cdr queue) min-prev))
+                    (return (car min))))))
+
 (defun queue-as-list (queue &optional copy)
   (if copy (copy-list (car queue)) (car queue)))
 
@@ -43,5 +64,5 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
           do (queue-push item copy)
           finally (return copy))))
 
-(defun queue-find (item queue)
-  (find item (car queue)))
+(defun queue-find (item queue &optional (key #'identity) (test #'eql))
+  (find item (car queue) :key key :test test))
