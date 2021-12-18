@@ -28,9 +28,11 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                    (#\] (error "Unexpected ']'."))
                    (T (parse-integer (format NIL "~c" token)))))))
       (loop for line = (read-line stream NIL)
+            counting line into count
             while line
             unless (char= #\[ (char line 0)) do (error "Expected '[': ~a" line)
-            collect (parse (tokenify line))))))
+            collect (parse (tokenify line)) into values
+            finally (return (values values count))))))
 
 #|
 --- Day 18: Snailfish ---
@@ -226,12 +228,19 @@ Add up all of the snailfish numbers from the homework assignment in the order th
 the magnitude of the final sum?
 |#
 
+(defun d18-to-string (value)
+  (if (numberp value)
+      (format NIL "~d" value)
+      (format NIL "[~a,~a]" (d18-to-string (car value)) (d18-to-string (cdr value)))))
+
+(defun d18-copy (value)
+  (let ((left (car value))
+        (right (cdr value)))
+    (cons (if (numberp left) left (d18-copy left))
+          (if (numberp right) right (d18-copy right)))))
+
 (defun d18-sum (values &key (verbose -1))
-  (labels ((to-string (value)
-             (if (numberp value)
-                 (format NIL "~d" value)
-                 (format NIL "[~a,~a]" (to-string (car value)) (to-string (cdr value)))))
-           (inc-right (value amount)
+  (labels ((inc-right (value amount)
              (if (consp (cdr value))
                  (inc-right (cdr value) amount)
                  (incf (cdr value) amount)))
@@ -248,10 +257,10 @@ the magnitude of the final sum?
                    (when explodep
                      (when (<= 3 verbose)
                        (format T "Explosion on left: ~a -> ~a,~a~%"
-                               (to-string value) e-left e-right))
+                               (d18-to-string value) e-left e-right))
                      (when (and (= verbose 2) e-right e-left)
                        (format T "Explosion on left: ~a -> ~a,~a~%"
-                               (to-string value) e-left e-right))
+                               (d18-to-string value) e-left e-right))
                      (when e-right
                        (if (numberp right)
                            (incf (cdr value) e-right)
@@ -265,10 +274,10 @@ the magnitude of the final sum?
                    (when explodep
                      (when (<= 3 verbose)
                        (format T "Explosion on right: ~a -> ~a,~a~%"
-                               (to-string value) e-left e-right))
+                               (d18-to-string value) e-left e-right))
                      (when (and (= verbose 2) e-left e-right)
                        (format T "Explosion on right: ~a -> ~a,~a~%"
-                               (to-string value) e-left e-right))
+                               (d18-to-string value) e-left e-right))
                      (when e-left
                        (if (numberp left)
                            (incf (car value) e-left)
@@ -289,31 +298,31 @@ the magnitude of the final sum?
                  (return-from split T))
                (when (and (numberp left) (< 9 left))
                  (when (<= 2 verbose)
-                   (format T "Split left: ~a -> " (to-string value)))
+                   (format T "Split left: ~a -> " (d18-to-string value)))
                  (setf (car value) (cons (floor left 2) (ceiling left 2)))
                  (when (<= 2 verbose)
-                   (format T "~a~%" (to-string value)))
+                   (format T "~a~%" (d18-to-string value)))
                  (return-from split T))
                (when (and (numberp right) (< 9 right))
                  (when (<= 2 verbose)
-                   (format T "Split right: ~a -> " (to-string value)))
+                   (format T "Split right: ~a -> " (d18-to-string value)))
                  (setf (cdr value) (cons (floor right 2) (ceiling right 2)))
                  (when (<= 2 verbose)
-                   (format T "~a~%" (to-string value)))
+                   (format T "~a~%" (d18-to-string value)))
                  (return-from split T))))
            (add (value other)
              (when (<= 1 verbose)
                (format T "~%  ~a~%+ ~a~%= ~a~%"
-                       (to-string value) (to-string other) (to-string (cons value other))))
+                       (d18-to-string value) (d18-to-string other) (d18-to-string (cons value other))))
              (cons value other)))
     (loop with value = NIL
           for number in values
           do (setf value (if value (add value number) number))
           do (loop while (or (explode value) (split value))
                    when (<= 2 verbose)
-                   do (format T "New state: ~a~%~%" (to-string value)))
+                   do (format T "New state: ~a~%~%" (d18-to-string value)))
           when (<= 1 verbose) do (format T "= ")
-          when (<= 0 verbose) do (format T "~a~%" (to-string value))
+          when (<= 0 verbose) do (format T "~a~%" (d18-to-string value))
           finally (return value))))
 
 (defun d18-magnitude (value)
@@ -326,3 +335,60 @@ the magnitude of the final sum?
   (d18-magnitude (d18-sum (d18-data) :verbose verbose)))
 
 ;; Answer: 4137
+
+#|
+-- Part Two ---
+
+You notice a second question on the back of the homework assignment:
+
+What is the largest magnitude you can get from adding only two of the snailfish numbers?
+
+Note that snailfish addition is not commutative - that is, x + y and y + x can produce different
+results.
+
+Again considering the last example homework assignment above:
+
+| [[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
+| [[[5,[2,8]],4],[5,[[9,9],0]]]
+| [6,[[[6,2],[5,6]],[[7,6],[4,7]]]]
+| [[[6,[0,7]],[0,9]],[4,[9,[9,0]]]]
+| [[[7,[6,4]],[3,[1,3]]],[[[5,5],1],9]]
+| [[6,[[7,3],[3,2]]],[[[3,8],[5,7]],4]]
+| [[[[5,4],[7,7]],8],[[8,3],8]]
+| [[9,3],[[9,9],[6,[4,9]]]]
+| [[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]]
+| [[[[5,2],5],[8,[3,7]]],[[5,[7,5]],[4,4]]]
+
+The largest magnitude of the sum of any two snailfish numbers in this list is 3993. This is the
+magnitude of
+[[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]] + [[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]],
+which reduces to
+[[[[7,8],[6,6]],[[6,0],[7,7]]],[[[7,8],[8,8]],[[7,9],[0,6]]]].
+
+What is the largest magnitude of any sum of two different snailfish numbers from the homework assignment?
+|#
+
+(defun d18p2 (&key (verbose -1))
+  (multiple-value-bind (values count)
+      (d18-data)
+    (let ((values (make-array count :element-type 'cons :initial-contents values)))
+      (loop with max-magnitude = 0
+            with max-a = NIL
+            with max-b = NIL
+            with max-sum = NIL
+            for n from 0 below count
+            for a = (aref values n)
+            do (loop for m from 0 below count
+                     for b = (aref values m)
+                     unless (= n m)
+                     do (let* ((sum (d18-sum (list (d18-copy a) (d18-copy b))
+                                             :verbose verbose))
+                               (magnitude (d18-magnitude sum)))
+                          (when (< max-magnitude magnitude)
+                            (setf max-magnitude magnitude)
+                            (setf max-a a)
+                            (setf max-b b)
+                            (setf max-sum sum))))
+            finally (return (values max-magnitude max-a max-b max-sum))))))
+
+;; Answer: 4573
