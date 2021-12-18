@@ -226,7 +226,7 @@ Add up all of the snailfish numbers from the homework assignment in the order th
 the magnitude of the final sum?
 |#
 
-(defun d18-sum (&key (verbose -1))
+(defun d18-sum (values &key (verbose -1))
   (labels ((to-string (value)
              (if (numberp value)
                  (format NIL "~d" value)
@@ -307,7 +307,7 @@ the magnitude of the final sum?
                        (to-string value) (to-string other) (to-string (cons value other))))
              (cons value other)))
     (loop with value = NIL
-          for number in (d18-data)
+          for number in values
           do (setf value (if value (add value number) number))
           do (loop while (or (explode value) (split value))
                    when (<= 2 verbose)
@@ -316,12 +316,13 @@ the magnitude of the final sum?
           when (<= 0 verbose) do (format T "~a~%" (to-string value))
           finally (return value))))
 
+(defun d18-magnitude (value)
+  (let ((left (car value))
+        (right (cdr value)))
+    (+ (* 3 (if (consp left) (d18-magnitude left) left))
+       (* 2 (if (consp right) (d18-magnitude right) right)))))
+
 (defun d18p1 (&key (verbose -1))
-  (labels ((magnitude (value)
-             (let ((left (car value))
-                   (right (cdr value)))
-               (+ (* 3 (if (consp left) (magnitude left) left))
-                  (* 2 (if (consp right) (magnitude right) right))))))
-    (magnitude (d18-sum :verbose verbose))))
+  (d18-magnitude (d18-sum (d18-data) :verbose verbose)))
 
 ;; Answer: 4137
