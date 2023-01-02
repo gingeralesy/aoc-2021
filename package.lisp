@@ -6,6 +6,6 @@
 
 (in-package #:cl-user)
 (defpackage #:aoc-2021
-  (:use #:cl #:alexandria)
+  (:use #:cl #:alexandria #:generators)
   (:export))
 (in-package #:aoc-2021)

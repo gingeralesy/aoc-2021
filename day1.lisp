@@ -132,18 +132,18 @@ Consider sums of a three-measurement sliding window. How many sums are larger th
     (let ((values (make-array 3 :element-type 'integer :initial-contents '(0 0 0)))
           (index 0))
       (labels ((sum () (loop for value across values summing value))
-               (next (line)
+               (next-sum (line)
                  (setf (aref values (mod index 3)) (parse-integer line))
                  (incf index)
                  (sum)))
         ;; First three.
-        (next (read-line stream))
-        (next (read-line stream))
-        (next (read-line stream))
+        (next-sum (read-line stream))
+        (next-sum (read-line stream))
+        (next-sum (read-line stream))
         (loop for line = (read-line stream NIL NIL)
               while line
               for prev = (sum) then current
-              for current = (next line)
+              for current = (next-sum line)
               counting (< prev current))))))
 
 ;; Answer: 1190

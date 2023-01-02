@@ -6,11 +6,20 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (in-package #:aoc-2021)
 
+(defparameter *clean-re* (cl-ppcre:create-scanner "^(.*\\S)?\\s*$"))
+
 (defun local-file (filename &key error)
   (let ((file (asdf:system-relative-pathname :aoc-2021 filename)))
     (when (and error (not (probe-file file)))
       (error "Missing file: ~a" filename))
     file))
+
+(defun clean (line)
+  (if (stringp line)
+      (multiple-value-bind (match groups)
+          (cl-ppcre:scan-to-strings *clean-re* line)
+        (or (when match (aref groups 0)) ""))
+      line))
 
 (defun queue-make ()
   (cons NIL NIL)) ;; (HEAD . TAIL)
