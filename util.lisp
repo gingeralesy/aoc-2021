@@ -21,16 +21,23 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
         (or (when match (aref groups 0)) ""))
       line))
 
+(declaim (inline queue-make))
 (defun queue-make ()
   (cons NIL NIL)) ;; (HEAD . TAIL)
 
+(declaim (inline queue-length))
 (defun queue-length (queue)
-  (length (car queue)))
+  (declare (optimize (speed 3)))
+  (length (the list (car queue))))
 
+(declaim (inline queue-empty-p))
 (defun queue-empty-p (queue)
-  (null (car queue)))
+  (declare (optimize (speed 3)))
+  (null (the list (car queue))))
 
 (defun queue-push (obj queue)
+  (declare (type list queue))
+  (declare (optimize (speed 3)))
   (if (cdr queue)
       (setf (cddr queue) (cons obj NIL)
             (cdr queue) (cddr queue))
@@ -61,6 +68,8 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
   queue)
 
 (defun queue-pop (queue)
+  (declare (type list queue))
+  (declare (optimize (speed 3)))
   (when (car queue)
     (let ((obj (caar queue)))
       (setf (car queue) (cdar queue))
@@ -87,14 +96,21 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                       (setf (cdr queue) min-prev))
                     (return (car min))))))
 
+(declaim (inline queue-as-list))
 (defun queue-as-list (queue &optional copy)
-  (if copy (copy-list (car queue)) (car queue)))
+  (declare (optimize (speed 3)))
+  (if copy (copy-list (the list (car queue))) (the list (car queue))))
 
 (defun queue-copy (queue)
+  (declare (type list queue))
+  (declare (optimize (speed 3)))
   (let ((copy (queue-make)))
     (loop for item in (queue-as-list queue)
           do (queue-push item copy)
           finally (return copy))))
 
 (defun queue-find (item queue &optional (key #'identity) (test #'eql))
-  (find item (car queue) :key key :test test))
+  (declare (type list queue))
+  (declare (type function key test))
+  (declare (optimize (speed 3)))
+  (find item (the list (car queue)) :key key :test test))

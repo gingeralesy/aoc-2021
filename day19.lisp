@@ -6,260 +6,647 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (in-package #:aoc-2021)
 
+;; https://adventofcode.com/2021/day/19
+
 (defparameter *day19-input* (local-file #P"day19.txt" :error T))
 
-(defparameter *day19-scanner-re* (cl-ppcre:create-scanner "--- scanner (\\d+) ---"))
+(defstruct (d19-vec (:constructor %make-d19-vec (&optional (x 0) (y 0) (z 0))))
+  (x 0 :type (signed-byte 32))
+  (y 0 :type (signed-byte 32))
+  (z 0 :type (signed-byte 32)))
 
-(defparameter *day19-report-re* (cl-ppcre:create-scanner "-?\\d+\\b"))
+(defmacro with-d19-vec ((x y z) vec &body body)
+  (let ((vec-var (gensym "VEC")))
+    `(let* ((,vec-var ,vec)
+            (,x (d19-vec-x ,vec-var))
+            (,y (d19-vec-y ,vec-var))
+            (,z (d19-vec-z ,vec-var)))
+       ,@body)))
 
-(defstruct d19-point
-  (x 0 :type integer)
-  (y 0 :type integer)
-  (z 0 :type integer))
+(defmacro with-d19-vecs ((x0 y0 z0 x1 y1 z1) vec-a vec-b &body body)
+  (let ((a-var (gensym "VEC"))
+        (b-var (gensym "VEC")))
+    `(let* ((,a-var ,vec-a)
+            (,b-var ,vec-b)
+            (,x0 (d19-vec-x ,a-var))
+            (,y0 (d19-vec-y ,a-var))
+            (,z0 (d19-vec-z ,a-var))
+            (,x1 (d19-vec-x ,b-var))
+            (,y1 (d19-vec-y ,b-var))
+            (,z1 (d19-vec-z ,b-var)))
+       ,@body)))
 
-(defun d19-point-eql (point other)
-  (declare (type d19-point point other))
-  (and (= (d19-point-x point) (d19-point-x other))
-       (= (d19-point-y point) (d19-point-y other))
-       (= (d19-point-z point) (d19-point-z other))))
+(declaim (inline d19-vec-clone))
+(defun d19-vec-clone (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (%make-d19-vec x y z)))
 
-(defun d19-point-add (point other &optional (destructive-p T))
-  (declare (type d19-point point other))
-  (let ((x (+ (d19-point-x point) (d19-point-x other)))
-        (y (+ (d19-point-y point) (d19-point-y other)))
-        (z (+ (d19-point-z point) (d19-point-z other))))
-    (cond
-      (destructive-p
-       (setf (d19-point-x point) x)
-       (setf (d19-point-y point) y)
-       (setf (d19-point-z point) z)
-       point)
-      (T (make-d19-point :x x :y y :z z)))))
+(declaim (inline d19-vec-set))
+(defun d19-vec-set (vec x y z)
+  (declare (type d19-vec vec))
+  (declare (type (signed-byte 32) x y z))
+  (declare (optimize (speed 3)))
+  (prog1 vec
+    (setf (d19-vec-x vec) x)
+    (setf (d19-vec-y vec) y)
+    (setf (d19-vec-z vec) z)))
 
-(defun d19-point-negate (point &optional (destructive-p T))
-  (declare (type d19-point point))
-  (let ((x (- (d19-point-x point)))
-        (y (- (d19-point-y point)))
-        (z (- (d19-point-z point))))
-    (cond
-      (destructive-p
-       (setf (d19-point-x point) x)
-       (setf (d19-point-y point) y)
-       (setf (d19-point-z point) z)
-       point)
-      (T (make-d19-point :x x :y y :z z)))))
+(declaim (inline d19-vec-copy))
+(defun d19-vec-copy (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) b
+    (d19-vec-set a x y z)))
 
-(defun d19-point-sub (point other &optional (destructive-p T))
-  (d19-point-add point (d19-point-negate other NIL) destructive-p))
+(declaim (inline d19-vec=))
+(defun d19-vec= (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (and (= (d19-vec-x a) (d19-vec-x b))
+       (= (d19-vec-y a) (d19-vec-y b))
+       (= (d19-vec-z a) (d19-vec-z b))))
 
-(defun d19-rotate (point axis direction &optional (destructive-p T))
-  (declare (type d19-point point))
-  (declare (type keyword axis direction))
-  (declare (type boolean destructive-p))
-  (flet ((set-point (x y z)
-           (cond
-             (destructive-p
-              (setf (d19-point-x point) x)
-              (setf (d19-point-y point) y)
-              (setf (d19-point-z point) z)
-              point)
-             (T (make-d19-point :x x :y y :z z)))))
-    (ecase direction
-      (:cw
-       (ecase axis
-         (:x (set-point (d19-point-x point)
-                        (d19-point-z point)
-                        (- (d19-point-y point))))
-         (:y (set-point (d19-point-z point)
-                        (d19-point-y point)
-                        (- (d19-point-x point))))
-         (:z (set-point (d19-point-y point)
-                        (- (d19-point-x point))
-                        (d19-point-z point)))))
-      (:ccw
-       (ecase axis
-         (:x (set-point (d19-point-x point)
-                        (- (d19-point-z point))
-                        (d19-point-y point)))
-         (:y (set-point (- (d19-point-z point))
-                        (d19-point-y point)
-                        (d19-point-x point)))
-         (:z (set-point (- (d19-point-y point))
-                        (d19-point-x point)
-                        (d19-point-z point))))))))
+(declaim (inline d19-vec-equal))
+(defun d19-vec-equal (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (let ((x0 (abs x0)) (y0 (abs y0)) (z0 (abs z0))
+          (x1 (abs x1)) (y1 (abs y1)) (z1 (abs z1)))
+      (or (and (= x0 x1) (or (and (= y0 y1) (= z0 z1))
+                             (and (= y0 z1) (= z0 y1))))
+          (and (= x0 y1) (or (and (= y0 z1) (= z0 x1))
+                             (and (= y0 x1) (= z0 z1))))
+          (and (= x0 z1) (or (and (= y0 x1) (= z0 y1))
+                             (and (= y0 y1) (= z0 x1))))))))
 
-(defun d19-rotation-test ()
-  (let ((point (make-d19-point :x 1)))
-    ;; Z axis.
-    (assert (=  1 (d19-point-y (d19-rotate point :z :ccw))))
-    (assert (= -1 (d19-point-x (d19-rotate point :z :ccw))))
-    (assert (= -1 (d19-point-y (d19-rotate point :z :ccw))))
-    ;; X axis.
-    (assert (= -1 (d19-point-z (d19-rotate point :x :ccw))))
-    (assert (=  1 (d19-point-y (d19-rotate point :x :ccw))))
-    (assert (=  1 (d19-point-z (d19-rotate point :x :ccw))))
-    ;; Y axis.
-    (assert (= -1 (d19-point-x (d19-rotate point :y :ccw))))
-    (assert (= -1 (d19-point-z (d19-rotate point :y :ccw))))
-    (assert (=  1 (d19-point-x (d19-rotate point :y :ccw))))))
+;; Arithmetic.
 
-(defclass d19-scanner ()
-  ((id :initarg :id :accessor id)
-   (report-count :initform 0 :accessor report-count)
-   (reports :initform NIL :accessor reports)
-   (vectors :initform NIL :accessor vectors))
-  (:default-initargs :id (error "ID required")))
+(declaim (inline d19-vec+))
+(defun d19-vec+ (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (%make-d19-vec (+ x0 x1) (+ y0 y1) (+ z0 z1))))
 
-(defmethod initialize-instance :after ((scanner d19-scanner) &key reports)
-  (let* ((count (length reports))
-         (vectors (make-array (list count count) :element-type '(or null d19-point)
-                                                 :initial-element NIL)))
-    (setf (report-count scanner) count)
-    (setf (reports scanner) (make-array count :element-type 'd19-point
-                                              :initial-contents reports))
-    (setf (vectors scanner) vectors)
-    (let ((reports (reports scanner)))
-      (loop for report across reports
-            for i from 0
-            do (loop for j from (1+ i)
-                     while (< j count)
-                     for other = (aref reports j)
-                     for vector = (d19-point-sub other report NIL)
-                     do (setf (aref vectors i j) vector)
-                     do (setf (aref vectors j i) (d19-point-negate vector NIL)))))))
+(declaim (inline d19-nvec+))
+(defun d19-nvec+ (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (d19-vec-set a (+ x0 x1) (+ y0 y1) (+ z0 z1))))
 
-(defmethod d19-orientation ((scanner d19-scanner))
-  (make-generator (:final-value NIL)
-    (let ((points (reports scanner))
-          (vectors (vectors scanner)))
-      (labels ((rotate-all (axis)
-                 (dotimes (i (report-count scanner))
-                   (d19-rotate (aref points i) axis :ccw))
-                 (dotimes (i (report-count scanner))
-                   (dotimes (j (report-count scanner))
-                     (when (/= i j)
-                       (setf (aref vectors i j) (d19-point-sub
-                                                 (aref points j)
-                                                 (aref points i)
-                                                 NIL))))))
-               (yield-four ()
-                 (dotimes (i 4)
-                   (yield scanner)
-                   (rotate-all :x))))
-        (dotimes (i 4)
-          (yield-four)
-          (rotate-all :y))
-        (rotate-all :z)
-        (yield-four)
-        (rotate-all :z)
-        (rotate-all :z)
-        (yield-four)
-        (rotate-all :z) ;; Return to normal.
-        (yield NIL)))))
+(declaim (inline d19-vec-))
+(defun d19-vec- (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (%make-d19-vec (- x0 x1) (- y0 y1) (- z0 z1))))
 
-(defmethod d19-move ((scanner d19-scanner) vector)
-  (declare (type d19-point vector))
-  (let ((reports (reports scanner)))
-    (dotimes (i (report-count scanner))
-      (d19-point-add (aref reports i) vector))))
+(declaim (inline d19-nvec-))
+(defun d19-nvec- (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (d19-vec-set a (- x0 x1) (- y0 y1) (- z0 z1))))
 
-(defmethod d19-matches ((scanner d19-scanner) (other d19-scanner))
-  (flet ((find-vector (vector i others)
-           (declare (type d19-point vector))
-           (declare (type array others))
-           (let ((depth (array-dimension others 1)))
-             (dotimes (j depth)
-               (when (and (/= i j) (d19-point-eql vector (aref others i j)))
-                 (return-from find-vector T))))))
-    (dotimes (i (- (report-count scanner) 10))
-      (dotimes (j (report-count other))
-        (loop for k from 0 below (report-count other)
-              for vector = (aref (vectors other) j k)
-              when (and (/= j k) (find-vector vector i (vectors scanner)))
-              count vector into matches
-              unless (< matches 11)
-              do (return-from d19-matches T))))))
+(declaim (inline d19-vec-negate))
+(defun d19-vec-negate (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (%make-d19-vec (- x) (- y) (- z))))
 
-(defmethod d19-validate ((scanner d19-scanner) valid-scanners)
-  (let ((orientation (d19-orientation scanner)))
-    (loop for scanner = (next orientation)
-          while scanner
-          do (loop for valid in valid-scanners
-                   when (d19-matches scanner valid)
-                   do (loop for point across (reports scanner)
-                            do (loop for target across (reports valid)
-                                     do (d19-move scanner (d19-point-sub target point NIL))
-                                     do (loop for report across (reports scanner)
-                                              when (find report (reports valid)
-                                                         :test #'d19-point-eql)
-                                              count report into matches
-                                              unless (< matches 12)
-                                              do (return-from d19-validate scanner)))
-                            finally (error "Couldn't validate position despite the match."))))))
+(declaim (inline d19-nvec-negate))
+(defun d19-nvec-negate (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec (- x) (- y) (- z))))
 
-(defun d19-validate-all (sensors)
-  (flet ((validate-all (sensors valid)
-           (let ((valid (copy-list valid)))
-             (loop with unknown = sensors
-                   for prev = NIL then current
-                   for current = unknown then (rest current)
-                   while current
-                   do (when (d19-validate (car current) valid)
-                        (push (car current) valid)
-                        (if prev
-                            (setf (cdr prev) (cdr current))
-                            (setf unknown (cdr unknown))))
-                   finally (return (values valid unknown))))))
-    (loop with prev-unknown = (1- (length sensors))
-          with validated = (list (first sensors))
-          for current = (rest sensors) then unknown
-          for (valid unknown) = (multiple-value-list (validate-all current validated))
-          unless (< (length unknown) prev-unknown) ;; TODO: Error instead.
-          do (error "Could not combine all of the sensors.")
-          ;; do (return-from d19-validate-all (values validated unknown))
-          do (setf validated valid)
-          do (setf prev-unknown (length unknown))
-          while unknown
-          finally (return validated))))
+(declaim (inline d19-vec-length))
+(defun d19-vec-length (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (let ((x2 (* x x)) (y2 (* y y)) (z2 (* z z)))
+      (declare (type (signed-byte 32) x2 y2 z2))
+      (sqrt (the (signed-byte 32) (+ x2 y2 z2))))))
+
+;; Rotations.
+
+(declaim (inline d19-vec-rotate-x-cw))
+(defun d19-vec-rotate-x-cw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec x z (- y))))
+
+(declaim (inline d19-vec-rotate-x-ccw))
+(defun d19-vec-rotate-x-ccw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec x (- z) y)))
+
+(declaim (inline d19-vec-rotate-x-180))
+(defun d19-vec-rotate-x-180 (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec x (- y) (- z))))
+
+(declaim (inline d19-vec-mirror-x))
+(defun d19-vec-mirror-x (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (setf (d19-vec-x vec) (- (d19-vec-x vec)))
+  vec)
+
+(declaim (inline d19-vec-rotate-y-cw))
+(defun d19-vec-rotate-y-cw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec (- z) y x)))
+
+(declaim (inline d19-vec-rotate-y-ccw))
+(defun d19-vec-rotate-y-ccw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec z y (- x))))
+
+(declaim (inline d19-vec-rotate-y-180))
+(defun d19-vec-rotate-y-180 (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec (- x) y (- z))))
+
+(declaim (inline d19-vec-mirror-y))
+(defun d19-vec-mirror-y (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (setf (d19-vec-y vec) (- (d19-vec-y vec)))
+  vec)
+
+(declaim (inline d19-vec-rotate-z-cw))
+(defun d19-vec-rotate-z-cw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec y (- x) z)))
+
+(declaim (inline d19-vec-rotate-z-ccw))
+(defun d19-vec-rotate-z-ccw (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec (- y) x z)))
+
+(declaim (inline d19-vec-rotate-z-180))
+(defun d19-vec-rotate-z-180 (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (with-d19-vec (x y z) vec
+    (d19-vec-set vec (- x) (- y) z)))
+
+(declaim (inline d19-vec-mirror-z))
+(defun d19-vec-mirror-z (vec)
+  (declare (type d19-vec vec))
+  (declare (optimize (speed 3)))
+  (setf (d19-vec-z vec) (- (d19-vec-z vec)))
+  vec)
+
+(declaim (inline d19-vec-rotations))
+(defun d19-vec-rotations (from to)
+  (declare (type d19-vec from to))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (fx fy fz tx ty tz) from to
+    (let ((rots (queue-make)))
+      (cond
+        ((= tx (- fx))
+         (queue-push :z rots)
+         (queue-push :180 rots))
+        ((= tx fy)
+         (queue-push :z rots)
+         (queue-push :cw rots))
+        ((= tx (- fy))
+         (queue-push :z rots)
+         (queue-push :ccw rots))
+        ((= tx fz)
+         (queue-push :y rots)
+         (queue-push :ccw rots))
+        ((= tx (- fz))
+         (queue-push :y rots)
+         (queue-push :cw rots)))
+      (cond
+        ((= ty (- fy))
+         (queue-push :x rots)
+         (queue-push :180 rots))
+        ((= ty fz)
+         (queue-push :x rots)
+         (queue-push :cw rots))
+        ((= ty (- fz))
+         (queue-push :x rots)
+         (queue-push :ccw rots)))
+      (cond
+        ((= tz (- fz))
+         (queue-push :z rots)
+         (queue-push :mirror rots)))
+      (queue-as-list rots))))
+
+(declaim (inline d19-vec-rotate))
+(defun d19-vec-rotate (vec axis direction)
+  (declare (type d19-vec vec))
+  (declare (type (or (eql :x) (eql :y) (eql :z) (eql :all)) axis))
+  (declare (type (or (eql :cw) (eql :ccw) (eql :180) (eql :mirror)) direction))
+  (declare (optimize (speed 3)))
+  (case axis
+    (:x (case direction
+          (:cw (d19-vec-rotate-x-cw vec))
+          (:ccw (d19-vec-rotate-x-ccw vec))
+          (:180 (d19-vec-rotate-x-180 vec))
+          (:mirror (d19-vec-mirror-x vec))))
+    (:y (case direction
+          (:cw (d19-vec-rotate-y-cw vec))
+          (:ccw (d19-vec-rotate-y-ccw vec))
+          (:180 (d19-vec-rotate-y-180 vec))
+          (:mirror (d19-vec-mirror-y vec))))
+    (:z (case direction
+          (:cw (d19-vec-rotate-z-cw vec))
+          (:ccw (d19-vec-rotate-z-ccw vec))
+          (:180 (d19-vec-rotate-z-180 vec))
+          (:mirror (d19-vec-mirror-z vec))))
+    (:all (ecase direction (:mirror (d19-nvec-negate vec)))))
+  vec)
+
+(defstruct (d19-scanner (:constructor %make-d19-scanner (id)))
+  (id 0 :type (integer 0 26))
+  (location (%make-d19-vec) :type d19-vec)
+  (count 0 :type (unsigned-byte 16))
+  (reports (make-array #x200 :element-type 'd19-vec :initial-element (%make-d19-vec))
+   :type (simple-array d19-vec (#x200)))
+  (vectors (make-array '(#x200 #x200) :element-type 'd19-vec :initial-element (%make-d19-vec))
+   :type (simple-array d19-vec (#x200 #x200))))
+
+(defmacro with-d19-scanner ((count reports &optional vectors) scanner &body body)
+  (let ((scanner-var (gensym "SCANNER")))
+    `(let* ((,scanner-var (the d19-scanner ,scanner))
+            (,count (d19-scanner-count ,scanner-var))
+            (,reports (d19-scanner-reports ,scanner-var))
+            ,@(when vectors `((,vectors (d19-scanner-vectors ,scanner-var)))))
+       (declare (type (unsigned-byte 16) ,count))
+       (declare (type (simple-array d19-vec (#x200)) ,reports))
+       ,@(when vectors `((declare (type (simple-array d19-vec (#x200 #x200)) ,vectors))))
+       ,@body)))
+
+(defun d19-scanner-calculate-vectors (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-slots (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (loop for j of-type (unsigned-byte 16) from (1+ i) below count
+            for vector = (d19-vec- (aref reports i) (aref reports j))
+            for length = (d19-vec-length vector)
+            do (setf (aref vectors i j) (d19-vec-negate vector))
+            do (setf (aref vectors j i) vector)))))
+
+(defun make-d19-scanner (id &rest scans)
+  (declare (type (integer 0 26) id))
+  (declare (optimize (speed 3)))
+  (let ((scanner (%make-d19-scanner id)))
+    (loop for scan of-type d19-vec in scans
+          for i of-type (unsigned-byte 16) = (d19-scanner-count scanner)
+          do (setf (d19-scanner-count scanner) (1+ i))
+          do (setf (aref (d19-scanner-reports scanner) i) scan))
+    (d19-scanner-calculate-vectors scanner)))
+
+(defun d19-scanner-clone (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (let ((other (%make-d19-scanner (d19-scanner-id scanner))))
+    (with-d19-scanner (count reports vectors) scanner
+      (setf (d19-scanner-count other) count)
+      (dotimes (i count other)
+        (setf (aref (d19-scanner-reports other) i) (d19-vec-clone (aref reports i)))
+        (dotimes (j count)
+          (unless (= i j)
+            (setf (aref (d19-scanner-vectors other) i j) (d19-vec-clone (aref vectors i j)))))))))
+
+(defmethod print-object ((scanner d19-scanner) stream)
+  (print-unreadable-object (scanner stream :type 'd19-scanner)
+    (with-d19-scanner (count reports) scanner
+      (format stream ":ID ~d :COUNT ~d :LOCATION ~d~%~t:REPORTS ~a"
+              (d19-scanner-id scanner) count (d19-scanner-location scanner)
+              (make-array count :element-type 'd19-vec
+                                :initial-contents (loop for i from 0 below count
+                                                        collect (aref reports i)))))))
+
+(defun d19-scanner-add (scanner report)
+  (declare (type d19-scanner scanner))
+  (declare (type d19-vec report))
+  ;; (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count)
+      (when (d19-vec= report (aref reports i))
+        (return-from d19-scanner-add)))
+    (incf (d19-scanner-count scanner))
+    (setf (aref reports count) report)
+    (dotimes (i count scanner)
+      (let* ((vector (d19-vec- report (aref reports i))))
+        (setf (aref vectors i count) vector)
+        (setf (aref vectors count i) (d19-vec-negate vector))))))
+
+(defun d19-scanner-move (scanner vector)
+  (declare (type d19-scanner scanner))
+  (declare (type d19-vec vector))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports) scanner
+    (dotimes (i count scanner)
+      (d19-nvec+ (aref reports i) vector))))
+
+;; Rotations.
+
+(defun d19-scanner-rotate-x-cw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-x-cw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-x-cw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-x-ccw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-x-ccw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-x-ccw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-x-180 (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-x-180 (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-x-180 (aref vectors i j))))))
+
+(defun d19-scanner-mirror-x (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-mirror-x (aref reports i))
+      (dotimes (j count)
+        (d19-vec-mirror-x (aref vectors i j))))))
+
+(defun d19-scanner-rotate-y-cw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-y-cw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-y-cw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-y-ccw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-y-ccw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-y-ccw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-y-180 (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-y-180 (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-y-180 (aref vectors i j))))))
+
+(defun d19-scanner-mirror-y (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-mirror-y (aref reports i))
+      (dotimes (j count)
+        (d19-vec-mirror-y (aref vectors i j))))))
+
+(defun d19-scanner-rotate-z-cw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-z-cw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-z-cw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-z-ccw (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-z-ccw (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-z-ccw (aref vectors i j))))))
+
+(defun d19-scanner-rotate-z-180 (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-rotate-z-180 (aref reports i))
+      (dotimes (j count)
+        (d19-vec-rotate-z-180 (aref vectors i j))))))
+
+(defun d19-scanner-mirror-z (scanner)
+  (declare (type d19-scanner scanner))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (dotimes (i count scanner)
+      (d19-vec-mirror-z (aref reports i))
+      (dotimes (j count)
+        (d19-vec-mirror-z (aref vectors i j))))))
+
+(defun d19-scanner-rotate (scanner rotations)
+  (declare (type d19-scanner scanner))
+  (declare (type list rotations))
+  (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (loop for axis of-type (or (eql :x) (eql :y) (eql :z) (eql :all)) in rotations by #'cddr
+          for direction of-type (or (eql :cw) (eql :ccw) (eql :180) (eql :mirror))
+          in (rest rotations) by #'cddr
+          do (dotimes (i count scanner)
+               (d19-vec-rotate (aref reports i) axis direction)
+               (dotimes (j count)
+                 (d19-vec-rotate (aref vectors i j) axis direction))))))
+
+(defstruct (d19-data (:constructor %make-d19-data ()))
+  (count 0 :type (integer 0 26))
+  (scanners (make-array 26 :element-type 'd19-scanner :initial-element (%make-d19-scanner 0))
+   :type (simple-array d19-scanner (26))))
+
+(defun make-d19-data (&rest scanners)
+  (declare (optimize (speed 3)))
+  (loop with data = (%make-d19-data)
+        for scanner of-type d19-scanner in scanners
+        for i of-type (integer 0 26) = (d19-data-count data)
+        do (setf (d19-data-count data) (1+ i))
+        do (setf (aref (d19-data-scanners data) i) scanner)
+        finally (return data)))
+
+(defmethod print-object ((data d19-data) stream)
+  (print-unreadable-object (data stream :type 'd19-data)
+    (with-slots (count scanners) data
+      (format stream ":COUNT ~d~%:SCANNERS ~a"
+              count (make-array count :element-type 'd19-scanner
+                                      :initial-contents (loop for i from 0 below count
+                                                              collect (aref scanners i)))))))
 
 (defun d19-data ()
-  (with-open-file (stream *day19-input* :if-does-not-exist :error)
-    (flet ((parse (point)
-             (make-d19-point :x (parse-integer (first point))
-                             :y (parse-integer (second point))
-                             :z (parse-integer (third point)))))
-      (loop with scanners = NIL
-            with current = NIL
-            with reports = NIL
-            with count = 0
-            for line = (read-line stream NIL :eof)
-            until (eql :eof line)
-            for scanner-p = (cl-ppcre:scan-to-strings *day19-scanner-re* line)
-            for numbers = (cl-ppcre:all-matches-as-strings *day19-report-re* line)
-            do (cond
-                 (scanner-p
-                  (when current
-                    (unless reports (error "No reports for scanner: ~a" current))
-                    (push (make-instance 'd19-scanner :id current :reports (nreverse reports))
-                          scanners))
-                  (setf current (parse-integer (first numbers)))
-                  (incf count))
-                 (numbers (push (parse numbers) reports)))
-            finally (return
-                      (progn
-                        (unless current (error "No scanners"))
-                        (unless reports (error "No reports for scanner: ~a" current))
-                        (push (make-instance 'd19-scanner :id current :reports (nreverse reports))
-                              scanners)
-                        (values (nreverse scanners) count)))))))
+  (declare (optimize (speed 3)))
+  (let ((id 0))
+    (declare (type (integer 0 26) id))
+    (flet ((make-scanner (reports)
+             (declare (optimize (speed 3)))
+             (prog1 (apply #'make-d19-scanner id (queue-as-list reports))
+               (incf id))))
+      (with-open-file (stream *day19-input* :if-does-not-exist :error)
+        (loop with scanners = (queue-make)
+              with reports = (queue-make)
+              for line of-type (or string (eql :eof)) = (read-line stream NIL :eof)
+              do (cond
+                   ((eql line :eof)
+                    (when (< 0 (queue-length reports))
+                      (queue-push (make-scanner reports) scanners)))
+                   ((position #\, (the string line) :test #'char=)
+                    (loop for i = 0 then (1+ j)
+                          for j = (position #\, line :start i :test #'char=)
+                          collect (parse-integer (subseq line i j)) into values
+                          while j
+                          finally (queue-push (apply #'%make-d19-vec values) reports)))
+                   ((< 0 (queue-length reports))
+                    (queue-push (make-scanner reports) scanners)
+                    (setf reports (queue-make))))
+              until (eql :eof line)
+              finally (return (apply #'make-d19-data (queue-as-list scanners))))))))
+
+(defun d19-match (scanner other)
+  (declare (type d19-scanner scanner other))
+  ;; (declare (optimize (speed 3)))
+  (with-d19-scanner (count reports vectors) scanner
+    (declare (ignore reports))
+    (with-d19-scanner (other-count other-reports other-vectors) other
+      (declare (ignore other-reports))
+      (flet ((position-in (item i earlier-matches)
+               ;; (declare (optimize (speed 3)))
+               (dotimes (index count)
+                 (when (and (<= count (aref earlier-matches index))
+                            (d19-vec-equal item (aref vectors i index)))
+                   (return index)))))
+        (dotimes (i count)
+          (dotimes (j other-count)
+            (let ((match (make-array count :element-type '(unsigned-byte 16) :initial-element #x1ff))
+                  (reverse
+                    (make-array other-count :element-type '(unsigned-byte 16) :initial-element #x1ff))
+                  (match-count 0))
+              (loop for k from 0 below other-count
+                    for vector = (aref other-vectors j k)
+                    for index = (position-in vector i match)
+                    do (when index
+                         (setf (aref match index) k)
+                         (setf (aref reverse k) index)
+                         (incf match-count))
+                    finally (when (<= 12 match-count)
+                              (return-from d19-match (values i j match reverse)))))))))))
+
+(defun d19-orientated-p (scanner other scanner-index other-index)
+  (declare (type d19-scanner scanner other))
+  (declare (type (unsigned-byte 16) scanner-index other-index))
+  (with-d19-scanner (scan-count scan-reports scan-vectors) scanner
+    (declare (ignore scan-reports))
+    (with-d19-scanner (oth-count oth-reports oth-vectors) other
+      (declare (ignore oth-reports))
+      (loop for i from 0 below scan-count
+            for vec = (aref scan-vectors scanner-index i)
+            when (dotimes (j oth-count)
+                   (when (d19-vec= vec (aref oth-vectors other-index j))
+                     (return T)))
+            count vec into valid
+            finally (return (<= 12 valid))))))
+
+(defun d19-orientate (scanner other)
+  (declare (type d19-scanner scanner other))
+  (multiple-value-bind (scanner-index other-index matches reverse)
+      (d19-match scanner other)
+    (unless scanner-index (return-from d19-orientate))
+    (with-d19-scanner (oth-count oth-reports oth-vectors) other
+      (with-d19-scanner (scan-count scan-reports scan-vectors) scanner
+        (dotimes (i scan-count)
+          (let ((match (aref matches i)))
+            (when (< match oth-count)
+              (let ((vec-to (aref scan-vectors scanner-index i))
+                    (vec-from (aref oth-vectors other-index match)))
+                (let ((rotations (d19-vec-rotations vec-from vec-to)))
+                  (when rotations (d19-scanner-rotate other rotations))))
+              (when (d19-orientated-p scanner other scanner-index other-index)
+                (let ((to (aref scan-reports i))
+                      (from (aref oth-reports (aref matches i)))
+                      (new-reports (make-array oth-count :element-type 'd19-vec
+                                                         :initial-element (%make-d19-vec)))
+                      (new-count 0))
+                  (let ((delta (d19-vec- to from)))
+                    (setf (d19-scanner-location other)
+                          (d19-vec+ (d19-scanner-location scanner) delta))
+                    (d19-scanner-move other delta))
+                  (dotimes (i oth-count)
+                    (unless (< (aref reverse i) oth-count)
+                      (setf (aref new-reports new-count) (aref oth-reports i))
+                      (incf new-count)))
+                  (return-from d19-orientate (values new-reports new-count)))))))))))
 
 (defun d19p1 ()
-  (loop for to-validate = (d19-data) then unknown
-        for (valid unknown) = (multiple-value-list (d19-validate-all to-validate))
-        for unique = (loop for report across (reports (first valid)) collecting report)
-        do (loop for other in (rest valid)
-                 do (loop for report across (reports other)
-                          unless (find report unique :test #'d19-point-eql)
-                          do (push report unique)))
-        summing (length unique)
-        while unknown))
+  (with-slots (count scanners) (d19-data)
+    (let ((merged (make-array count :element-type 'boolean :initial-element NIL))
+          (result (d19-scanner-clone (aref scanners 0)))
+          (valid-count 1))
+      (setf (aref merged 0) T)
+      (loop repeat (* count count) ;; Just in case.
+            while (< valid-count count)
+            do (loop for i from 0 below count
+                     for scanner-a = (aref scanners i)
+                     for a-merged-p = (aref merged i)
+                     ;; do (format T "~&i: ~a~%" i)
+                     do (loop for j from (1+ i) below count
+                              for scanner-b = (aref scanners j)
+                              for b-merged-p = (aref merged j)
+                              ;; do (format T "~&~tj: ~a~%" j)
+                              do (when (and (/= i j) (not (eql a-merged-p b-merged-p)))
+                                   (let ((base (if a-merged-p scanner-a scanner-b))
+                                         (other (if b-merged-p scanner-a scanner-b)))
+                                     (format T "~&Validating Scanner ~d against Scanner ~d~%"
+                                             (d19-scanner-id other) (d19-scanner-id base))
+                                     (multiple-value-bind (new-reports new-count)
+                                         (d19-orientate base other)
+                                       (when (and new-reports (< 0 new-count))
+                                         (format T "~&Merged ~d from Scanner ~d~%"
+                                                 new-count (d19-scanner-id other))
+                                         (setf (aref merged (d19-scanner-id other)) T)
+                                         (incf valid-count)
+                                         (dotimes (k new-count)
+                                           (d19-scanner-add result (aref new-reports k)))
+                                         (return)))))))
+            finally (return (d19-scanner-count result))))))
+
+;; Answer: 313
