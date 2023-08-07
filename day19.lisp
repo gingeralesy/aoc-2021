@@ -349,7 +349,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 (defun d19-scanner-add (scanner report)
   (declare (type d19-scanner scanner))
   (declare (type d19-vec report))
-  ;; (declare (optimize (speed 3)))
+  (declare (optimize (speed 3)))
   (with-d19-scanner (count reports vectors) scanner
     (dotimes (i count)
       (when (d19-vec= report (aref reports i))
@@ -544,7 +544,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (defun d19-match (scanner other)
   (declare (type d19-scanner scanner other))
-  ;; (declare (optimize (speed 3)))
+  (declare (optimize (speed 3)))
   (with-d19-scanner (count reports vectors) scanner
     (declare (ignore reports))
     (with-d19-scanner (other-count other-reports other-vectors) other
@@ -561,6 +561,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                   (reverse
                     (make-array other-count :element-type '(unsigned-byte 16) :initial-element #x1ff))
                   (match-count 0))
+              (declare (type (unsigned-byte 32) match-count))
               (loop for k from 0 below other-count
                     for vector = (aref other-vectors j k)
                     for index = (position-in vector i match)
@@ -574,6 +575,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 (defun d19-orientated-p (scanner other scanner-index other-index)
   (declare (type d19-scanner scanner other))
   (declare (type (unsigned-byte 16) scanner-index other-index))
+  (declare (optimize (speed 3)))
   (with-d19-scanner (scan-count scan-reports scan-vectors) scanner
     (declare (ignore scan-reports))
     (with-d19-scanner (oth-count oth-reports oth-vectors) other
@@ -588,8 +590,10 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (defun d19-orientate (scanner other)
   (declare (type d19-scanner scanner other))
+  (declare (optimize (speed 3)))
   (multiple-value-bind (scanner-index other-index matches reverse)
       (d19-match scanner other)
+    (declare (type (or null (simple-array (unsigned-byte 16) (*))) matches reverse))
     (unless scanner-index (return-from d19-orientate))
     (with-d19-scanner (oth-count oth-reports oth-vectors) other
       (with-d19-scanner (scan-count scan-reports scan-vectors) scanner
@@ -617,31 +621,37 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                   (return-from d19-orientate (values new-reports new-count)))))))))))
 
 (defun d19p1 ()
+  (declare (optimize (speed 3)))
   (with-slots (count scanners) (d19-data)
+    (declare (type (unsigned-byte 32) count))
+    (declare (type (simple-array d19-scanner (26)) scanners))
     (let ((merged (make-array count :element-type 'boolean :initial-element NIL))
           (result (d19-scanner-clone (aref scanners 0)))
           (valid-count 1))
+      (declare (type (unsigned-byte 32) valid-count))
       (setf (aref merged 0) T)
       (loop repeat (* count count) ;; Just in case.
             while (< valid-count count)
             do (loop for i from 0 below count
                      for scanner-a = (aref scanners i)
-                     for a-merged-p = (aref merged i)
+                     for a-merged-p of-type boolean = (aref merged i)
                      ;; do (format T "~&i: ~a~%" i)
                      do (loop for j from (1+ i) below count
                               for scanner-b = (aref scanners j)
-                              for b-merged-p = (aref merged j)
+                              for b-merged-p of-type boolean = (aref merged j)
                               ;; do (format T "~&~tj: ~a~%" j)
                               do (when (and (/= i j) (not (eql a-merged-p b-merged-p)))
                                    (let ((base (if a-merged-p scanner-a scanner-b))
                                          (other (if b-merged-p scanner-a scanner-b)))
-                                     (format T "~&Validating Scanner ~d against Scanner ~d~%"
-                                             (d19-scanner-id other) (d19-scanner-id base))
+                                     ;; (format T "~&Validating Scanner ~d against Scanner ~d~%"
+                                     ;;         (d19-scanner-id other) (d19-scanner-id base))
                                      (multiple-value-bind (new-reports new-count)
                                          (d19-orientate base other)
+                                       (declare (type (or null (simple-array d19-vec (*))) new-reports))
+                                       (declare (type (or null (unsigned-byte 32)) new-count))
                                        (when (and new-reports (< 0 new-count))
-                                         (format T "~&Merged ~d from Scanner ~d~%"
-                                                 new-count (d19-scanner-id other))
+                                         ;; (format T "~&Merged ~d from Scanner ~d~%"
+                                         ;;         new-count (d19-scanner-id other))
                                          (setf (aref merged (d19-scanner-id other)) T)
                                          (incf valid-count)
                                          (dotimes (k new-count)
