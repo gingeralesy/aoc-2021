@@ -21,6 +21,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
             (,x (d19-vec-x ,vec-var))
             (,y (d19-vec-y ,vec-var))
             (,z (d19-vec-z ,vec-var)))
+       (declare (type (signed-byte 32) ,x ,y ,z))
        ,@body)))
 
 (defmacro with-d19-vecs ((x0 y0 z0 x1 y1 z1) vec-a vec-b &body body)
@@ -34,6 +35,7 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
             (,x1 (d19-vec-x ,b-var))
             (,y1 (d19-vec-y ,b-var))
             (,z1 (d19-vec-z ,b-var)))
+       (declare (type (signed-byte 32) ,x0 ,y0 ,z0 ,x1 ,y1 ,z1))
        ,@body)))
 
 (declaim (inline d19-vec-clone))
@@ -134,6 +136,24 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
     (let ((x2 (* x x)) (y2 (* y y)) (z2 (* z z)))
       (declare (type (signed-byte 32) x2 y2 z2))
       (sqrt (the (signed-byte 32) (+ x2 y2 z2))))))
+
+(declaim (inline d19-vec-distance))
+(defun d19-vec-distance (a b) ;; Manhattan
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (the (signed-byte 32) (+ (abs (- x1 x0)) (abs (- y1 y0)) (abs (- z1 z0))))))
+
+(declaim (inline d19-vec-crossp))
+(defun d19-vec-crossp (a b)
+  (declare (type d19-vec a b))
+  (declare (optimize (speed 3)))
+  (with-d19-vecs (x0 y0 z0 x1 y1 z1) a b
+    (%make-d19-vec (the (signed-byte 32) (- (* y0 z1) (* z0 y1)))
+                   (the (signed-byte 32) (- (* z0 x1) (* x0 z1)))
+                   (the (signed-byte 32)
+                        (- (the (signed-byte 32) (* x0 y1))
+                           (the (signed-byte 32) (* y0 x1)))))))
 
 ;; Rotations.
 
@@ -311,7 +331,6 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
     (dotimes (i count scanner)
       (loop for j of-type (unsigned-byte 16) from (1+ i) below count
             for vector = (d19-vec- (aref reports i) (aref reports j))
-            for length = (d19-vec-length vector)
             do (setf (aref vectors i j) (d19-vec-negate vector))
             do (setf (aref vectors j i) vector)))))
 
@@ -605,14 +624,13 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                 (let ((rotations (d19-vec-rotations vec-from vec-to)))
                   (when rotations (d19-scanner-rotate other rotations))))
               (when (d19-orientated-p scanner other scanner-index other-index)
-                (let ((to (aref scan-reports i))
-                      (from (aref oth-reports (aref matches i)))
+                (let ((to (aref scan-reports scanner-index))
+                      (from (aref oth-reports other-index))
                       (new-reports (make-array oth-count :element-type 'd19-vec
                                                          :initial-element (%make-d19-vec)))
                       (new-count 0))
                   (let ((delta (d19-vec- to from)))
-                    (setf (d19-scanner-location other)
-                          (d19-vec+ (d19-scanner-location scanner) delta))
+                    (setf (d19-scanner-location other) delta)
                     (d19-scanner-move other delta))
                   (dotimes (i oth-count)
                     (unless (< (aref reverse i) oth-count)
@@ -620,43 +638,63 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
                       (incf new-count)))
                   (return-from d19-orientate (values new-reports new-count)))))))))))
 
+(defun d19-unique-reports (count scanners)
+  (declare (type (unsigned-byte 32) count))
+  (declare (type (simple-array d19-scanner (26)) scanners))
+  (declare (optimize (speed 3)))
+  (let ((merged (make-array count :element-type 'boolean :initial-element NIL))
+        (result (d19-scanner-clone (aref scanners 0)))
+        (valid-count 1))
+    (declare (type (unsigned-byte 32) valid-count))
+    (setf (aref merged 0) T)
+    (loop repeat (* count count) ;; Just in case.
+          while (< valid-count count)
+          do (loop for i from 0 below count
+                   for scanner-a = (aref scanners i)
+                   for a-merged-p of-type boolean = (aref merged i)
+                   ;; do (format T "~&i: ~a~%" i)
+                   do (loop for j from (1+ i) below count
+                            for scanner-b = (aref scanners j)
+                            for b-merged-p of-type boolean = (aref merged j)
+                            ;; do (format T "~&~tj: ~a~%" j)
+                            do (when (and (/= i j) (not (eql a-merged-p b-merged-p)))
+                                 (let ((base (if a-merged-p scanner-a scanner-b))
+                                       (other (if b-merged-p scanner-a scanner-b)))
+                                   ;; (format T "~&Validating Scanner ~d against Scanner ~d~%"
+                                   ;;         (d19-scanner-id other) (d19-scanner-id base))
+                                   (multiple-value-bind (new-reports new-count)
+                                       (d19-orientate base other)
+                                     (declare (type (or null (simple-array d19-vec (*))) new-reports))
+                                     (declare (type (or null (unsigned-byte 32)) new-count))
+                                     (when (and new-reports (< 0 new-count))
+                                       ;; (format T "~&Merged ~d from Scanner ~d~%"
+                                       ;;         new-count (d19-scanner-id other))
+                                       (setf (aref merged (d19-scanner-id other)) T)
+                                       (incf valid-count)
+                                       (dotimes (k new-count)
+                                         (d19-scanner-add result (aref new-reports k)))
+                                       (return)))))))
+          finally (return result))))
+
 (defun d19p1 ()
   (declare (optimize (speed 3)))
   (with-slots (count scanners) (d19-data)
-    (declare (type (unsigned-byte 32) count))
-    (declare (type (simple-array d19-scanner (26)) scanners))
-    (let ((merged (make-array count :element-type 'boolean :initial-element NIL))
-          (result (d19-scanner-clone (aref scanners 0)))
-          (valid-count 1))
-      (declare (type (unsigned-byte 32) valid-count))
-      (setf (aref merged 0) T)
-      (loop repeat (* count count) ;; Just in case.
-            while (< valid-count count)
-            do (loop for i from 0 below count
-                     for scanner-a = (aref scanners i)
-                     for a-merged-p of-type boolean = (aref merged i)
-                     ;; do (format T "~&i: ~a~%" i)
-                     do (loop for j from (1+ i) below count
-                              for scanner-b = (aref scanners j)
-                              for b-merged-p of-type boolean = (aref merged j)
-                              ;; do (format T "~&~tj: ~a~%" j)
-                              do (when (and (/= i j) (not (eql a-merged-p b-merged-p)))
-                                   (let ((base (if a-merged-p scanner-a scanner-b))
-                                         (other (if b-merged-p scanner-a scanner-b)))
-                                     ;; (format T "~&Validating Scanner ~d against Scanner ~d~%"
-                                     ;;         (d19-scanner-id other) (d19-scanner-id base))
-                                     (multiple-value-bind (new-reports new-count)
-                                         (d19-orientate base other)
-                                       (declare (type (or null (simple-array d19-vec (*))) new-reports))
-                                       (declare (type (or null (unsigned-byte 32)) new-count))
-                                       (when (and new-reports (< 0 new-count))
-                                         ;; (format T "~&Merged ~d from Scanner ~d~%"
-                                         ;;         new-count (d19-scanner-id other))
-                                         (setf (aref merged (d19-scanner-id other)) T)
-                                         (incf valid-count)
-                                         (dotimes (k new-count)
-                                           (d19-scanner-add result (aref new-reports k)))
-                                         (return)))))))
-            finally (return (d19-scanner-count result))))))
+    (d19-scanner-count (d19-unique-reports count scanners))))
 
 ;; Answer: 313
+
+(defun d19p2 ()
+  (declare (optimize (speed 3)))
+  (with-slots (count scanners) (d19-data)
+    (declare (type (integer 0 26) count))
+    (declare (type (simple-array d19-scanner (26)) scanners))
+    (d19-unique-reports count scanners)
+    (let ((max 0))
+      (dotimes (i 26 max)
+        (let ((from (d19-scanner-location (aref scanners i))))
+          (loop for j from (1+ i) below count
+                for to = (d19-scanner-location (aref scanners j))
+                for dist = (d19-vec-distance from to)
+                when (< max dist) do (setf max dist)))))))
+
+;; Answer: 10656
