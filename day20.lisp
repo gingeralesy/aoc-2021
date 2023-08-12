@@ -25,11 +25,43 @@
 SIDE - size of the side of the actual image in the middle of the buffer
 SIZE - size of the side of the entire buffer always at least 2 larger than SIDE
 ALGORITHM - 512 bits to enhance by
-DATA - the entire image buffer"
+BUFFERS - the entire image buffer with double buffering"
+  (current-buffer 0 :type bit)
   (side 0 :type (unsigned-byte 16))
   (size 128 :type (unsigned-byte 16))
   (algorithm (make-array 512 :element-type 'bit) :type (simple-bit-vector 512))
-  (data (make-array (* 128 128) :element-type 'bit) :type (simple-bit-vector *)))
+  (buffers
+   (make-array 2 :element-type '(simple-bit-vector *)
+                 :initial-contents (list (make-array (* 128 128) :element-type 'bit)
+                                         (make-array (* 128 128) :element-type 'bit)))
+   :type (simple-array (simple-bit-vector *) (2))))
+
+(declaim (inline d20-image-data))
+(declaim (ftype (function (d20-image) (simple-bit-vector *)) d20-image-data))
+(defun d20-image-data (image)
+  (declare (type d20-image image))
+  (aref (d20-image-buffers image) (d20-image-current-buffer image)))
+
+(declaim (inline d20-image-swap-buffer))
+(declaim (ftype (function (d20-image) (simple-bit-vector *)) d20-image-swap-buffer))
+(defun d20-image-swap-buffer (image)
+  (declare (type d20-image image))
+  (aref (d20-image-buffers image) (logand 1 (1+ (d20-image-current-buffer image)))))
+
+(declaim (inline d20-image-swap))
+(declaim (ftype (function (d20-image) d20-image) d20-image-swap))
+(defun d20-image-swap (image)
+  (declare (type d20-image image))
+  (setf (d20-image-current-buffer image) (logand 1 (1+ (d20-image-current-buffer image))))
+  image)
+
+(defmacro with-d20-image ((data swap &rest slots) image &body body)
+  (let ((image-var (gensym "D20-IMAGE-")))
+    `(let* ((,image-var ,image)
+            (,data (d20-image-data ,image-var))
+            ,@(when swap `((,swap (d20-image-swap-buffer ,image-var)))))
+       (with-slots (,@slots) ,image-var
+         ,@body))))
 
 (defmacro do-d20-image ((bit image &optional return-value) &body body)
   (let ((image-var (gensym "D20-IMAGE-"))
@@ -55,74 +87,78 @@ DATA - the entire image buffer"
 (defmethod d20-coord->index ((image d20-image) (x integer) (y integer))
   (declare (type (signed-byte 32) x y))
   (declare (optimize (speed 3)))
-  (with-slots (side size) image
-    (declare (type (unsigned-byte 16) side size))
-    (let ((diff (- size side)))
-      (+ (floor diff 2) (* size (floor diff 2)) (* y size) x))))
+  (let* ((size (d20-image-size image))
+         (diff (- size (d20-image-side image))))
+    (declare (type (unsigned-byte 16) size diff))
+    (+ (floor diff 2) (* size (floor diff 2)) (* y size) x)))
 
 (defmethod d20-expand ((image d20-image))
   (declare (optimize (speed 3)))
-  (with-slots (size data) image
-    (declare (type (unsigned-byte 16) size))
-    (declare (type (simple-bit-vector *) data))
-    (let* ((new-size (* size 2))
-           (new-data (make-array (* new-size new-size) :element-type 'bit
-                                                       :initial-element (bit data 0))))
-      (declare (type (unsigned-byte 16) new-size))
-      (d20-copy-bits data size new-data new-size)
-      (setf data new-data)
-      (setf size new-size)
-      image)))
+  (with-slots (side size current-buffer buffers) image
+    (declare (type (unsigned-byte 16) side size))
+    (declare (type bit current-buffer))
+    (declare (type (simple-array (simple-bit-vector *) (2)) buffers))
+    (unless (< (+ 2 side) size)
+      (let* ((data (aref buffers current-buffer))
+             (new-size (* 2 size))
+             (new-data (make-array (* new-size new-size)
+                                   :element-type 'bit :initial-element (bit data 0))))
+        (declare (type (unsigned-byte 16) size))
+        (d20-copy-bits data size new-data new-size)
+        (setf (aref buffers current-buffer) new-data)
+        (setf (aref buffers (logand 1 (1+ current-buffer)))
+              (make-array (* new-size new-size)
+                          :element-type 'bit
+                          :initial-element (bit (d20-image-swap-buffer image) 0)))
+        (setf size new-size)
+        image))))
 
 (defmethod d20-part ((image d20-image) (x integer) (y integer))
   (declare (type (signed-byte 32) x y))
   (declare (optimize (speed 3)))
-  (with-slots (side size data) image
+  (with-d20-image (data NIL side size) image
     (declare (type (unsigned-byte 16) side size))
     (declare (type (simple-bit-vector *) data))
-    (loop with value of-type (unsigned-byte 9) = 0
-          with shift of-type (signed-byte 8) = 9
-          with diff of-type (unsigned-byte 16) = (- size side)
-          with index of-type (signed-byte 32) = (d20-coord->index image (1- x) (1- y))
-          with outside = (bit data (d20-coord->index image -1 -1))
-          repeat 3
-          do (loop repeat 3
-                   do (decf shift)
-                   do (setf value (logior value (logand #x1ff (ash (bit data index) shift))))
-                   do (incf index))
-          do (incf index (- size 3))
-          finally (return value))))
+    (let ((value 0)
+          (shift 9)
+          (index (d20-coord->index image (1- x) (1- y))))
+      (declare (type (unsigned-byte 9) value))
+      (declare (type (signed-byte 8) shift))
+      (declare (type (signed-byte 32) index))
+      (dotimes (i 3 value)
+        (dotimes (j 3)
+          (decf shift)
+          (setf value (logior value (logand #x1ff (ash (bit data index) shift))))
+          (incf index))
+        (incf index (- size 3))))))
 
 (defmethod d20-enhance ((image d20-image))
   (declare (optimize (speed 3)))
-  (with-slots (side size algorithm data) image
+  (d20-expand image) ;; Expands only if necessary.
+  (with-d20-image (data swap side size algorithm) image
     (declare (type (unsigned-byte 16) side size))
     (declare (type (simple-bit-vector 512) algorithm))
-    (declare (type (simple-bit-vector *) data))
+    (declare (type (simple-bit-vector *) data swap))
     (setf side (+ side 2))
-    (unless (< side size)
-      (d20-expand image))
-    (let* ((diff (- size side))
-           (index (d20-coord->index image 0 0))
-           (outside (bit algorithm (if (zerop (bit data 0)) 0 511)))
-           (new-data (make-array (* size size) :element-type 'bit :initial-element outside)))
+    (let ((diff (- size side))
+          (index (d20-coord->index image 0 0)))
       (declare (type (unsigned-byte 16) diff index))
-      (dotimes (y side)
-        (dotimes (x side)
-          (let ((part (d20-part image x y)))
-            (declare (type (unsigned-byte 9) part))
-            (setf (bit new-data index) (bit algorithm part)))
-          (incf index))
-        (incf index diff))
-      (bit-xor data data T)
-      (bit-ior data new-data T))
-    image))
+      (bit-xor swap swap T) ;; Clear.
+      (unless (zerop (bit algorithm (if (zerop (bit data 0)) 0 511)))
+        (bit-not swap T)) ;; Set correct outside value.
+      (prog1
+          (dotimes (y side image)
+            (dotimes (x side)
+              (setf (bit swap index) (bit algorithm (d20-part image x y)))
+              (incf index))
+            (incf index diff))
+        (d20-image-swap image)))))
 
 (defmethod d20-to-string ((image d20-image))
   (declare (optimize (speed 3)))
-  (with-slots (side size data) image
-    (declare (type (unsigned-byte 16) side size))
+  (with-d20-image (data NIL side size) image
     (declare (type (simple-bit-vector *) data))
+    (declare (type (unsigned-byte 16) side size))
     (declare (optimize (speed 3)))
     (let* ((diff (- size side))
            (index (+ (floor diff 2) (* size (floor diff 2))))
@@ -142,7 +178,8 @@ DATA - the entire image buffer"
   (declare (optimize (speed 3)))
   (with-open-file (stream *day20-input* :if-does-not-exist :error)
     (let ((image (%make-d20-image)))
-      (with-slots (side size algorithm data) image
+      (with-slots (side size algorithm current-buffer buffers) image
+        (declare (type (simple-array (simple-bit-vector *) (2)) buffers))
         (let ((tmp (make-array (* size size) :element-type 'bit)))
           (loop with raw of-type (simple-array character (*)) = (read-line stream)
                 for i from 0 below 512
@@ -181,8 +218,9 @@ DATA - the entire image buffer"
             (loop for new-size = (* 2 size)
                   while (< new-size side)
                   finally (setf size new-size))
-            (setf data (make-array (* size size) :element-type 'bit)))
-          (d20-copy-bits tmp side data size)))
+            (setf (aref buffers 0) (make-array (* size size) :element-type 'bit))
+            (setf (aref buffers 1) (make-array (* size size) :element-type 'bit)))
+          (d20-copy-bits tmp side (aref buffers current-buffer) size)))
       image)))
 
 (defun d20p1 ()
