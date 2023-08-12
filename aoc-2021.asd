@@ -33,9 +33,11 @@
                (:file "day17")
                (:file "day18")
                (:file "day19")
-               (:file "day20"))
+               (:file "day20")
+               (:file "day21"))
   :depends-on (:alexandria
                :asdf
                :cl-ppcre
                :trees
-               :generators))
+               :generators
+               :local-time))
