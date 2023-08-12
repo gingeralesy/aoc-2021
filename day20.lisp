@@ -193,3 +193,12 @@ DATA - the entire image buffer"
       (unless (zerop bit) (incf count)))))
 
 ;; 5846
+
+(defun d20p2 ()
+  (let ((image (d20-data))
+        (count 0))
+    (loop repeat 50 do (d20-enhance image))
+    (do-d20-image (bit image count)
+      (unless (zerop bit) (incf count)))))
+
+;; 21149
