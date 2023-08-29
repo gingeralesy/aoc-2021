@@ -163,6 +163,22 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
         (setf start (mod (1+ start) size))
         value))))
 
+(defmethod aqueue-clear ((queue aqueue))
+  (declare (optimize (speed 3)))
+  (with-slots (count size start array) queue
+    (declare (type (unsigned-byte 32) count size start))
+    (declare (type (simple-array T (*)) array))
+    (when (< 0 count)
+      (dotimes (i size)
+        (setf (aref array i) NIL)))
+    (setf start 0)
+    (setf count 0)
+    queue))
+
+(defmethod aqueue-empty-p ((queue aqueue))
+  (declare (optimize (speed 3)))
+  (= 0 (aqueue-count queue)))
+
 (declaim (inline btree-parent btree-left-child btree-right-child))
 
 (defun btree-parent (index)
