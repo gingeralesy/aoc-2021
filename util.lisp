@@ -6,6 +6,8 @@ Author: Janne Pakarinen <gingeralesy@gmail.com>
 
 (in-package #:aoc-2021)
 
+(deftype input-line () '(or (and keyword (eql :eof)) (simple-array character (*))))
+
 (defparameter *clean-re* (cl-ppcre:create-scanner "^(.*\\S)?\\s*$"))
 
 (defun local-file (filename &key error)
